@@ -13,7 +13,7 @@ def kill_proc(p):
 
 def setup(rank, world_size):
     print(f'Start rank {rank}, world_size {world_size}.')
-    torch.cuda.set_device(0)
+    torch.cuda.set_device(rank)
     master_addr = "localhost"
     master_port = '12306'
     init_method = 'tcp://{master_addr}:{master_port}'.format(
@@ -23,7 +23,6 @@ def setup(rank, world_size):
 
 def run(rank, world_size, shared_queue):
     setup(rank, world_size)
-    torch.cuda.set_device(rank)
     npc.init(rank, world_size, shared_queue)
 
     device = torch.device(f'cuda:{rank}')
@@ -36,6 +35,7 @@ if __name__ == '__main__':
     nproc = 2
     processes = []
     q = mp.Queue()
+    mp.set_start_method("spawn",force=True)
     for i in range(nproc):
         p = mp.Process(target=run, args=(i, nproc, q))
         atexit.register(kill_proc, p)
