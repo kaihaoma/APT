@@ -39,12 +39,14 @@ message(STATUS "NPC linker: ${NPC_LINKER_LIBS}")
 
 file(GLOB npc_src
           "src/ops/*.cc"
-          "src/*.cc")
+          "src/*.cc"
+          "src/cuda/*cu")
 
 include_directories(src ${NPC_INCLUDES})
 
 add_library(npc SHARED ${npc_src})
 set_target_properties(npc PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-set_target_properties(npc PROPERTIES CUDA_STANDARD 11)
+set_target_properties(npc PROPERTIES CUDA_STANDARD 14)
+set_target_properties(npc PROPERTIES CXX_STANDARD 14)
 set_target_properties(npc PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(npc PRIVATE ${NPC_LINKER_LIBS})

@@ -1,5 +1,5 @@
-#ifndef UTILS_H_
-#define UTILS_H_
+#ifndef NPC_UTILS_H_
+#define NPC_UTILS_H_
 
 #include <cuda_runtime.h>
 #include <torch/custom_class.h>
@@ -10,6 +10,10 @@
 
 using IdType = int64_t;
 using DataType = float;
+
+#define ENCODE_ID(i) (-(i)-2)
+const int FEAT_ON_UVA = 0;
+const int FEAT_ON_DEV = 1;
 
 #define CUDACHECK(cmd)                                      \
   do {                                                      \
@@ -31,6 +35,14 @@ using DataType = float;
   } while (0)
 
 namespace npc {
+
+/*tensor*/
+
+template <typename T>
+void LogTensor(torch::Tensor ts, std::string name) {
+  LOG(INFO) << "Tensor " << name << "ts: " << ts;
+}
+
 template <typename T>
 std::string VecToString(const std::vector<T> &vec) {
   std::string ret = "[";

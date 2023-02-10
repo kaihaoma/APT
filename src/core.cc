@@ -44,7 +44,6 @@ torch::Tensor NCCLGetUniqueId() {
 
 ncclComm_t BuildNCCLComm(
     int64_t rank, int64_t world_size, torch::Tensor nccl_id_tensor) {
-  auto* state = NPCState::Global();
   auto nccl_id = TensorToNCCLId(nccl_id_tensor);
   ncclComm_t ret;
   NCCLCHECK(ncclCommInitRank(&ret, world_size, nccl_id, rank));
