@@ -7,15 +7,8 @@
 #include <string>
 
 #include "./state.h"
-
-#define NCCLCHECK(cmd) do {                         \
-  ncclResult_t res = cmd;                           \
-  if (res != ncclSuccess) {                         \
-    printf("Failed, NCCL error %s:%d '%s'\n",       \
-        __FILE__,__LINE__,ncclGetErrorString(res)); \
-    exit(EXIT_FAILURE);                             \
-  }                                                 \
-} while(0)
+#include "./utils.h"
+#include "glog/logging.h"
 
 namespace npc {
 
@@ -51,7 +44,6 @@ torch::Tensor NCCLGetUniqueId() {
 
 ncclComm_t BuildNCCLComm(
     int64_t rank, int64_t world_size, torch::Tensor nccl_id_tensor) {
-  auto* state = NPCState::Global();
   auto nccl_id = TensorToNCCLId(nccl_id_tensor);
   ncclComm_t ret;
   NCCLCHECK(ncclCommInitRank(&ret, world_size, nccl_id, rank));
@@ -64,6 +56,12 @@ void Initialize(
   state->rank = rank;
   state->world_size = world_size;
   state->nccl_comm = BuildNCCLComm(rank, world_size, nccl_id_tensor);
+  CUDACHECK(cudaSetDevice(rank));
 }
 
+void Test(torch::Tensor test_tensor, int64_t idx, double val) {
+  LOG(INFO) << "Hello from glog";
+  LOG(INFO) << "Tensor to Vector: " << TensorToString(test_tensor)
+            << "\t idx: " << idx << "\t val: " << val;
+}
 }  // namespace npc
