@@ -36,13 +36,6 @@ const int FEAT_ON_DEV = 1;
 
 namespace npc {
 
-/*tensor*/
-
-template <typename T>
-void LogTensor(torch::Tensor ts, std::string name) {
-  LOG(INFO) << "Tensor " << name << "ts: " << ts;
-}
-
 template <typename T>
 std::string VecToString(const std::vector<T> &vec) {
   std::string ret = "[";
@@ -55,8 +48,8 @@ std::string VecToString(const std::vector<T> &vec) {
 }
 
 inline std::string TensorToString(torch::Tensor t) {
-  std::vector<float> vec_tensor(
-      t.data_ptr<float>(), t.data_ptr<float>() + t.numel());
+  std::vector<IdType> vec_tensor(
+      t.data_ptr<IdType>(), t.data_ptr<IdType>() + t.numel());
   return VecToString(vec_tensor);
 }
 

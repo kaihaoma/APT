@@ -4,8 +4,10 @@
 #include "./cache_feats.h"
 #include "./cache_graphs.h"
 #include "./core.h"
+#include "./feat_shuffle.h"
 #include "./load_subtensor.h"
 #include "./ops/collective.h"
+#include "./sampling.h"
 #include "./utils.h"
 
 namespace npc {
@@ -17,6 +19,8 @@ TORCH_LIBRARY(npc, m) {
       .def("cache_feats", &CacheFeats)
       .def("cache_graphs", &CacheGraphs)
       .def("load_subtensor", &LoadSubtensor)
+      .def("sample_neighbors", &SamplingNeighbors)
+      .def("feat_shuffle", &FeatShuffle)
       .def("test", &Test);
 }
 

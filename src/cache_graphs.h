@@ -11,7 +11,8 @@ namespace npc {
 
 void CacheGraphs(
     IdType num_local_nodes, IdType num_graph_nodes, IdType num_cached_nodes,
-    torch::Tensor sorted_idx, torch::Tensor indptr, torch::Tensor indices);
+    torch::Tensor sorted_idx, torch::Tensor indptr, torch::Tensor local_indices,
+    torch::Tensor global_indices);
 }
 
 #endif
