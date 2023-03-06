@@ -59,9 +59,12 @@ void Initialize(
   CUDACHECK(cudaSetDevice(rank));
 }
 
-void Test(torch::Tensor test_tensor, int64_t idx, double val) {
+void Test(torch::Tensor test_tensor, torch::Tensor perm) {
   LOG(INFO) << "Hello from glog";
-  LOG(INFO) << "Tensor to Vector: " << TensorToString(test_tensor)
-            << "\t idx: " << idx << "\t val: " << val;
+  auto perm_tensor = test_tensor.index_select(0, perm);
+  auto recv_tensor =
+      torch::index_select_backward(perm_tensor, perm_tensor.sizes(), 0, perm);
+  LOG(INFO) << "ts1: " << test_tensor << "\t ts2: " << perm_tensor
+            << "\t ts3: " << recv_tensor;
 }
 }  // namespace npc

@@ -23,7 +23,6 @@ void CacheFeats(
   state->feat_storage.num_dev_nodes = num_cached_nodes;
   state->feat_storage.num_uva_nodes = num_nodes - num_cached_nodes;
   state->feat_storage.input_dim = input_dim;
-
   state->feat_storage.dev_feats =
       node_feats.index({torch::indexing::Slice(0, num_cached_nodes, 1)})
           .to(torch::kCUDA, rank);
@@ -46,7 +45,6 @@ void CacheFeats(
   for (int i = num_cached_nodes; i < num_nodes; ++i) {
     host_feat_pos_map[vec_sorted_idx[i]] = ENCODE_ID(i - num_cached_nodes);
   }
-
   state->feat_storage.feat_pos_map =
       torch::from_blob(
           host_feat_pos_map.data(), {num_nodes},
