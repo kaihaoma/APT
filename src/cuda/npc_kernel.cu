@@ -17,7 +17,6 @@ __global__ void _CSRRowWiseLoadSubtensorAlignedAllKernel(
     const IdType out_row_start = out_row * dim;
     IdType feat_type = -1;
     IdType origin_in_row_start = -1;
-
     if (feat_pos_map[index[out_row]] < -1) {
       // on uva
       feat_type = FEAT_ON_UVA;
@@ -57,6 +56,7 @@ void IndexSelectAll(
   dim3 block(BLOCK_X, BLOCK_ROWS);
   int BLOCK_NUM = (size + TILE_SIZE - 1) / TILE_SIZE;
   dim3 grid(BLOCK_NUM);
+  CUDACHECK(cudaGetLastError());
   _CSRRowWiseLoadSubtensorAlignedAllKernel<<<grid, block, 0, stream>>>(
       size, feat_dim, index.data_ptr<IdType>(), feat_pos_map.data_ptr<IdType>(),
       input_table_dev.data_ptr<DataType>(),
@@ -180,7 +180,9 @@ __global__ void _PermuteKernel(
     auto rank = belongs_to[idx];
     auto offset =
         (rank == 0 ? 0 : bucket_offset[rank - 1]) + inner_bucket_offset[idx];
-    sorted_idx[offset] = seeds[idx] - min_vids[rank];
+    // tranfer to local nid
+    // sorted_idx[offset] = seeds[idx] - min_vids[rank];
+    sorted_idx[offset] = seeds[idx];
     permutation[idx] = offset;
   }
 }

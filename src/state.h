@@ -11,7 +11,7 @@ struct FeatStorage {
   torch::Tensor labels;
   torch::Tensor dev_feats, uva_feats;
   torch::Tensor feat_pos_map;
-  IdType num_dev_nodes, num_uva_nodes, num_total_nodes;
+  IdType num_dev_nodes, num_uva_nodes, num_graph_nodes, num_total_nodes;
   IdType input_dim;
 };
 

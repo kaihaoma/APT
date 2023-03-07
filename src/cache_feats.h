@@ -10,8 +10,8 @@
 namespace npc {
 
 void CacheFeats(
-    torch::Tensor node_feats, torch::Tensor sorted_idx,
-    IdType num_cached_nodes);
+    torch::Tensor node_feats, torch::Tensor sorted_idx, double cached_ratio,
+    IdType num_total_nodes);
 }
 
 #endif
