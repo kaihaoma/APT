@@ -21,6 +21,7 @@ TORCH_LIBRARY(npc, m) {
       .def("load_subtensor", &LoadSubtensor)
       .def("sample_neighbors", &SamplingNeighbors)
       .def("feat_shuffle", &FeatShuffle)
+      .def("shuffle_seeds", &ShuffleSeeds)
       .def("test", &Test);
 }
 

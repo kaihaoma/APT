@@ -18,6 +18,10 @@ namespace npc {
 std::tuple<
     torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 SamplingNeighbors(torch::Tensor min_vids, torch::Tensor seeds, IdType fanout);
+
+// shuffle seeds based on min_vids
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+ShuffleSeeds(torch::Tensor min_vids, torch::Tensor seeds);
 }  // namespace npc
 
 #endif
