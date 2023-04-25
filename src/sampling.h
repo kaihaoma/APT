@@ -8,6 +8,9 @@
 #include "./utils.h"
 
 namespace npc {
+
+std::tuple<torch::Tensor, torch::Tensor> LocalSamplingNeibhorsOneLayer(
+    torch::Tensor seeds, IdType fanout);
 // return value:
 // 1. seeds (original order)
 // 2. neighbors (original order)

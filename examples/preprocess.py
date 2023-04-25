@@ -1,6 +1,7 @@
 import dgl
 import torch
 import utils
+import os
 import torch.multiprocessing as mp
 
 
@@ -73,7 +74,32 @@ def data_preprocess(args):
     dgl.data.utils.save_graphs(save_path, [shared_graph])
 
 
+def save_pure_graph(input_path, output_path):
+    print(f"[Note] Save pure graph args: \n{input_path}\n{output_path}")
+    dataset_tuple = dgl.load_graphs(input_path)
+    graph = dataset_tuple[0][0]
+    # clear graph ndata & edata
+    for k in list(graph.ndata.keys()):
+        if 'train' not in k:
+            print(f"[Note]Pop ndata: {k}")
+            graph.ndata.pop(k)
+    for k in list(graph.edata.keys()):
+        print(f"[Note]Pop edata: {k}")
+        graph.edata.pop(k)
+
+    dgl.save_graphs(output_path, [graph])
+
+
 if __name__ == "__main__":
-    args = utils.init_args()
-    print(args)
-    data_preprocess(args)
+    # args = utils.init_args()
+    # print(args)
+    # data_preprocess(args)
+    ds_dir = "./npc_dataset"
+    ds_name = ["ogbn-productsM4", "ogbn-papers100M4", "ogbn-papers100MM8"]
+    for ds in ds_name:
+        ds_input = f"{ds}.bin"
+        ds_output = f"{ds}_pure.bin"
+
+        input_path = os.path.join(ds_dir, ds_input)
+        output_path = os.path.join(ds_dir, ds_output)
+        save_pure_graph(input_path, output_path)

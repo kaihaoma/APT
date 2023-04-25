@@ -5,6 +5,13 @@
 #include "./state.h"
 
 namespace npc {
+
+std::tuple<torch::Tensor, torch::Tensor> LocalSamplingNeibhorsOneLayer(
+    torch::Tensor seeds, IdType fanout) {
+  auto local_neighbors = LocalSampleNeighbors(seeds, fanout);
+  return {seeds, local_neighbors};
+}
+
 std::tuple<
     torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 SamplingNeighbors(torch::Tensor min_vids, torch::Tensor seeds, IdType fanout) {
@@ -19,7 +26,6 @@ SamplingNeighbors(torch::Tensor min_vids, torch::Tensor seeds, IdType fanout) {
 
   // All-to-all send sizes
   auto arange = torch::arange(1, world_size + 1);
-
   auto recv_sizes = torch::empty(world_size, cuda_tensor_option);
   AlltoAll(dev_size, recv_sizes, arange, arange);
 
@@ -32,7 +38,8 @@ SamplingNeighbors(torch::Tensor min_vids, torch::Tensor seeds, IdType fanout) {
 
   AlltoAll(sorted_idx, recv_frontier, dev_offset, recv_offset);
 
-  auto local_neighbors = LocalSampleNeighbors(recv_frontier, fanout, true);
+  auto local_neighbors = LocalSampleNeighbors(recv_frontier, fanout);
+
   return {recv_frontier, local_neighbors, permutation, recv_offset, dev_offset};
 }
 

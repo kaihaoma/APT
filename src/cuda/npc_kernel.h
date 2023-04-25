@@ -19,8 +19,7 @@ void IndexSelectAll(
     cudaStream_t stream = 0);
 
 torch::Tensor LocalSampleNeighbors(
-    torch::Tensor frontier, int fanout, bool use_local_nid = false,
-    cudaStream_t stream = 0);
+    torch::Tensor frontier, int fanout, cudaStream_t stream = 0);
 
 // cluster seeds with global nid into $world_size$ bluckets
 // return torch::Tensor bucket_size, bucket_offset, sorted_idx, permutation,

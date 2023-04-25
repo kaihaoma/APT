@@ -15,6 +15,7 @@ torch::Tensor FeatShuffle(
   auto outputs_size = recv_offset[-1].item<IdType>();
   auto flatten_outputs =
       torch::empty(outputs_size * feat_dim, inputs.options());
+
   AlltoAll(flatten_inputs, flatten_outputs, send_offset, recv_offset, feat_dim);
 
   auto outputs =

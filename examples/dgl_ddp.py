@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchmetrics.functional as MF
 import tqdm
+from model import DGLSAGE
 from dgl.data import AsNodePredDataset
 from dgl.dataloading import (
     DataLoader,
@@ -20,74 +21,6 @@ from dgl.dataloading import (
 from dgl.multiprocessing import shared_tensor
 from ogb.nodeproppred import DglNodePropPredDataset
 from torch.nn.parallel import DistributedDataParallel
-
-
-class SAGE(nn.Module):
-    def __init__(self, in_size, hid_size, out_size, num_layers):
-        super().__init__()
-        self.layers = nn.ModuleList()
-        if num_layers > 1:
-            self.layers.append(dglnn.SAGEConv(in_size, hid_size, 'mean'))
-            for i in range(1, num_layers - 1):
-                self.layers.append(dglnn.SAGEConv(hid_size, hid_size, 'mean'))
-            self.layers.append(dglnn.SAGEConv(hid_size, out_size, 'mean'))
-        else:
-            self.layers.append(dglnn.SAGEConv(in_size, out_size, 'mean'))
-        self.dropout = nn.Dropout(0.5)
-        self.hid_size = hid_size
-        self.out_size = out_size
-
-    def forward(self, blocks, x):
-        h = x
-        for l, (layer, block) in enumerate(zip(self.layers, blocks)):
-            h = layer(block, h)
-            if l != len(self.layers) - 1:
-                h = F.relu(h)
-                h = self.dropout(h)
-        return h
-
-    def inference(self, g, device, batch_size, use_uva):
-        g.ndata["h"] = g.ndata["feat"]
-        sampler = MultiLayerFullNeighborSampler(1, prefetch_node_feats=["h"])
-        for l, layer in enumerate(self.layers):
-            dataloader = DataLoader(
-                g,
-                torch.arange(g.num_nodes(), device=device),
-                sampler,
-                device=device,
-                batch_size=batch_size,
-                shuffle=False,
-                drop_last=False,
-                num_workers=0,
-                use_ddp=True,
-                use_uva=use_uva,
-            )
-            # in order to prevent running out of GPU memory, allocate a
-            # shared output tensor 'y' in host memory
-            y = shared_tensor(
-                (
-                    g.num_nodes(),
-                    self.hid_size
-                    if l != len(self.layers) - 1
-                    else self.out_size,
-                )
-            )
-            for input_nodes, output_nodes, blocks in (
-                tqdm.tqdm(dataloader) if dist.get_rank() == 0 else dataloader
-            ):
-                x = blocks[0].srcdata["h"]
-                h = layer(blocks[0], x)  # len(blocks) = 1
-                if l != len(self.layers) - 1:
-                    h = F.relu(h)
-                    h = self.dropout(h)
-                # non_blocking (with pinned memory) to accelerate data transfer
-                y[output_nodes] = h.to(y.device, non_blocking=True)
-            # make sure all GPUs are done writing to 'y'
-            dist.barrier()
-            g.ndata["h"] = y if use_uva else y.to(device)
-
-        g.ndata.pop("h")
-        return y
 
 
 def evaluate(model, g, dataloader):
@@ -121,7 +54,7 @@ def train(proc_id, nprocs, device, g, train_idx, val_idx, model, fanout, args):
     use_evaluate = False
     logs_dir = args.logs_dir
     sampler = NeighborSampler(
-        fanout, prefetch_node_feats=["feat"], prefetch_labels=["label"]
+        fanout, prefetch_node_feats=["feat"], prefetch_labels=["label"], replace=True,
     )
     train_dataloader = DataLoader(
         g,
@@ -160,6 +93,7 @@ def train(proc_id, nprocs, device, g, train_idx, val_idx, model, fanout, args):
         torch.cuda.synchronize()
         dist.barrier()
         t2 = time.time()
+        # (input_nodes, output_nodes, blocks)
         for it, (input_nodes, output_nodes, blocks) in enumerate(
             train_dataloader
         ):
@@ -167,8 +101,8 @@ def train(proc_id, nprocs, device, g, train_idx, val_idx, model, fanout, args):
             dist.barrier()
             t1 = time.time()
             x = blocks[0].srcdata["feat"]
-            y = blocks[-1].dstdata["label"]
-            y_hat = model(blocks, x)
+            y = blocks[-1].dstdata["label"].long()
+            y_hat = model((blocks, x,))
             loss = F.cross_entropy(y_hat, y)
             opt.zero_grad()
             loss.backward()
@@ -194,8 +128,10 @@ def train(proc_id, nprocs, device, g, train_idx, val_idx, model, fanout, args):
                 )
     if proc_id == 0:
         print(f"[Note] Write to file {logs_dir}")
-        avg_time_epoch_sampling_and_loading = round(total_time[0] * 1000. / num_record_epochs, 4)
-        avg_time_epoch_training = round(total_time[1] * 1000. / num_record_epochs, 4)
+        avg_time_epoch_sampling_and_loading = round(
+            total_time[0] * 1000. / num_record_epochs, 4)
+        avg_time_epoch_training = round(
+            total_time[1] * 1000. / num_record_epochs, 4)
         with open(logs_dir, 'a') as f:
             # Tag, Dataset, Model, Machines, local batch_size, fanout, cache ratio, num_epochs, num batches per epoch, Sampling time and Loading time, Training time,
             writer = csv.writer(f, lineterminator='\n')
@@ -223,20 +159,13 @@ def run(proc_id, g, data, args):
     in_size = g.ndata["feat"].shape[1]
     fanout = [int(fanout) for fanout in args.fan_out.split(',')]
     num_layers = len(fanout)
-    model = SAGE(in_size, args.num_hidden, out_size, num_layers).to(device)
+    model = DGLSAGE(in_size, args.num_hidden, out_size, num_layers).to(device)
     model = DistributedDataParallel(
         model, device_ids=[device], output_device=device
     )
     # training + testing
-    '''
-    use_uva = args.mode == "mixed"
-    batch_size = args.batch_size
-    num_epochs = args.num_epochs
-    use_evaluate = False
-    warmup_epoch = args.warmup_epoch
-    logs_dir = args.logs_dir
-    '''
-    train(proc_id, args.world_size, device, g, train_idx, val_idx, model, fanout, args)
+    train(proc_id, args.world_size, device, g,
+          train_idx, val_idx, model, fanout, args)
     # layerwise_infer(proc_id, device, g, test_idx, model, use_uva)
     # cleanup process group
     dist.destroy_process_group()
@@ -275,7 +204,7 @@ if __name__ == "__main__":
     dataset = AsNodePredDataset(DglNodePropPredDataset(args.dataset))
     g = dataset[0]
     # avoid creating certain graph formats in each sub-process to save momory
-    g = g.format("csc")
+    g = g.formats("csc")
     # thread limiting to avoid resource competition
     os.environ["OMP_NUM_THREADS"] = str(mp.cpu_count() // 2 // args.world_size)
     data = (

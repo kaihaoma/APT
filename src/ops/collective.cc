@@ -24,7 +24,7 @@ torch::Tensor Allreduce(torch::Tensor t) {
 template <typename T, ncclDataType_t NCCL_DATA_TYPE>
 void _AlltoAll(
     T* input, T* output, IdType* send_offset, IdType* recv_offset, int expand) {
-  CUDACHECK(cudaStreamSynchronize(0));
+  // CUDACHECK(cudaStreamSynchronize(0));
   auto* state = NPCState::Global();
   int world_size = state->world_size;
   IdType send_off = 0;
@@ -45,7 +45,7 @@ void _AlltoAll(
     recv_off = recv_offset[r];
   }
   ncclGroupEnd();
-  CUDACHECK(cudaStreamSynchronize(0));
+  // CUDACHECK(cudaStreamSynchronize(0));
 }
 
 void AlltoAll(

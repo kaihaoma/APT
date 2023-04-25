@@ -9,16 +9,24 @@ namespace npc {
 
 struct FeatStorage {
   torch::Tensor labels;
-  torch::Tensor dev_feats, uva_feats;
+  torch::Tensor dev_feats, uva_feats, global_shared_feats;
   torch::Tensor feat_pos_map;
   IdType num_dev_nodes, num_uva_nodes, num_graph_nodes, num_total_nodes;
   IdType input_dim;
 };
 
 struct GraphStorage {
-  torch::Tensor dev_indptr, dev_local_indices, dev_global_indices;
+  torch::Tensor dev_indptr, dev_indices;
+  torch::Tensor uva_indptr, uva_indices;
   torch::Tensor adj_pos_map;
-  IdType num_graph_nodes;
+  IdType num_graph_nodes, num_total_nodes, num_cached_nodes;
+};
+
+struct Profiler {
+  // graph storage
+  IdType graph_num_cached_nodes, graph_num_total_nodes, graph_cache_bytes;
+  // feat storage
+  IdType feat_num_cached_nodes, node_num_total_nodes, feat_cache_bytes;
 };
 
 struct NPCState {
@@ -34,6 +42,8 @@ struct NPCState {
     static NPCState state;
     return &state;
   }
+  // for log
+  std::string tag;
 };
 
 }  // namespace npc

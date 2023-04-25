@@ -14,6 +14,7 @@ torch::Tensor LoadSubtensor(torch::Tensor node_id) {
   auto feat_pos_map = state->feat_storage.feat_pos_map;
   auto dev_feats = state->feat_storage.dev_feats;
   auto uva_feats = state->feat_storage.uva_feats;
+
   // ret tensor
   torch::Tensor ret = torch::empty(
       {num_nodes, input_dim},
