@@ -34,9 +34,6 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g3 -ggdb")
 message(STATUS "Torch dir: ${Torch_DIR}")
 message(STATUS "NPC linker: ${NPC_LINKER_LIBS}")
 
-
-
-
 file(GLOB npc_src
           "src/ops/*.cc"
           "src/*.cc"
@@ -49,4 +46,17 @@ set_target_properties(npc PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 set_target_properties(npc PROPERTIES CUDA_STANDARD 14)
 set_target_properties(npc PROPERTIES CXX_STANDARD 14)
 set_target_properties(npc PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(npc PRIVATE ${NPC_LINKER_LIBS})
+target_link_libraries(npc ${NPC_LINKER_LIBS})
+
+find_package(MPI REQUIRED)
+message(STATUS "MPI_INCLUDE_PATH -- ${MPI_INCLUDE_PATH}")
+message(STATUS "MPI_CXX_LIBRARIES -- ${MPI_CXX_LIBRARIES}")
+add_subdirectory(third_party/googletest)
+enable_testing()
+include_directories(third_party/googletest/googletest/include)
+include_directories("src")
+include_directories(${MPI_INCLUDE_PATH})
+file(GLOB_RECURSE TEST_SRC_FILES ${PROJECT_SOURCE_DIR}/tests/*.cc)
+add_executable(runUnitTests ${TEST_SRC_FILES})
+target_link_libraries(runUnitTests npc gtest gtest_main ${MPI_CXX_LIBRARIES})
+add_test(UnitTests runUnitTests)

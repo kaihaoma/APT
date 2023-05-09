@@ -1,0 +1,10 @@
+venv
+build
+dist
+npc.egg-info
+.vscode
+__pycache__
+data
+logs
+npc_dataset
+sampling_all
