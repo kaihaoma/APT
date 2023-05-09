@@ -1,4 +1,4 @@
-fanout=15,10,5
+fanout=5,10,15
 #fanout=10,10,10
 system=NPC
 #system in NPC, DGL-global, DSP, DSP-1hop
@@ -19,4 +19,4 @@ input_dim=128
 #default setting is 4GPUs products
 #python examples/train.py 
 
-python examples/train.py --system ${system} --feat_cache_ratio ${feat_cache_ratio} --graph_cache_ratio ${graph_cache_ratio} --graph_path ${graph_path} --min_vids ${min_vids} --num_classes ${num_classes} --input_dim ${input_dim}
+python examples/train.py --system ${system} --feat_cache_ratio ${feat_cache_ratio} --graph_cache_ratio ${graph_cache_ratio} --graph_path ${graph_path} --min_vids ${min_vids} --num_classes ${num_classes} --input_dim ${input_dim} --fan_out ${fanout}

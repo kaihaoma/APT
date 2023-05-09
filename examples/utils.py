@@ -120,7 +120,7 @@ def init_args():
     parser.add_argument("--num_epochs", type=int,
                         default=10, help="number of epochs")
     parser.add_argument("--fan_out", type=str,
-                        default="5, 10, 15", help="Fanout")
+                        default="5,10,15", help="Fanout")
     parser.add_argument("--dropout", default=0.5)
     parser.add_argument("--num_nodes", type=int,
                         default=-1, help="number of total nodes")
