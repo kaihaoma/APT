@@ -118,18 +118,6 @@ def setup(rank, local_rank, world_size, args, backend=None):
         backend=backend, init_method=init_method, rank=rank, world_size=world_size
     )
     print("[Note]Done dist init")
-    print(f"[Note]Dist test")
-    input = torch.arange(4) + rank * 4
-    output = torch.empty([4], dtype=torch.int64)
-    dist.all_to_all_single(output, input)
-    print(f"[Note]output:{output}")
-    """
-    from test import test_two_backend_bandwidth
-    device = torch.device(f"cuda:{local_rank}")
-    # test_two_backend_bandwidth(rank, local_rank, device, world_size)
-    # test_gloo_all_to_all_correctness(rank, world_size, args.remote_worker_id[1:])
-    # exit(0)
-    """
 
 
 def cleanup():
@@ -509,6 +497,7 @@ def init_args(args=None) -> argparse.Namespace:
     )
 
     args = parser.parse_args(args)
+
     import json
     import os
 
