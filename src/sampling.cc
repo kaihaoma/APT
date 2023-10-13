@@ -1,58 +1,110 @@
 #include "./sampling.h"
 
+#include <ATen/Functions.h>
+#include <c10/cuda/CUDAStream.h>
+
 #include "./cuda/npc_kernel.h"
 #include "./ops/collective.h"
 #include "./state.h"
+#include "glog/logging.h"
 
 namespace npc {
 
 std::tuple<torch::Tensor, torch::Tensor> LocalSamplingNeibhorsOneLayer(
-    torch::Tensor seeds, IdType fanout) {
-  auto local_neighbors = LocalSampleNeighbors(seeds, fanout);
+    torch::Tensor seeds, IdType fanout, IdType to_virtual) {
+  auto local_neighbors = LocalSampleNeighbors(seeds, fanout, to_virtual);
   return {seeds, local_neighbors};
+}
+
+torch::Tensor SrcDsttoVir(IdType fanout, torch::Tensor dst, torch::Tensor src) {
+  auto* state = NPCState::Global();
+  auto world_size = state->world_size;
+  auto min_vids = state->min_vids;
+  auto map_allnodes = MapSrcDsttoVir(world_size, fanout, dst, src, min_vids);
+  return map_allnodes;
 }
 
 std::tuple<
     torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-SamplingNeighbors(torch::Tensor min_vids, torch::Tensor seeds, IdType fanout) {
+NPSampleAndShuffle(torch::Tensor seeds, IdType fanout) {
+  torch::Tensor shuffled_frontier, permutation, recv_offset, dev_offset;
+  std::tie(shuffled_frontier, permutation, recv_offset, dev_offset) =
+      ShuffleSeeds(seeds);
+  auto local_neighbors = LocalSampleNeighbors(shuffled_frontier, fanout);
+
+  auto stream = at::cuda::getCurrentCUDAStream();
+  CUDACHECK(cudaStreamSynchronize(stream));
+  return {
+      shuffled_frontier, local_neighbors, permutation, recv_offset, dev_offset};
+}
+
+std::tuple<
+    torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+SPSampleAndShuffle(
+    IdType num_seeds, torch::Tensor send_frontier,
+    torch::Tensor sorted_allnodes, torch::Tensor unique_frontier) {
   auto* state = NPCState::Global();
-  int rank = state->rank;
-  int world_size = state->world_size;
-  auto cuda_tensor_option = seeds.options();
+  auto rank = state->rank;
+  auto world_size = state->world_size;
+  auto num_total_nodes = state->graph_storage.num_total_nodes;
+  // map src&dst to vir
+  // rules: [is_src, belong, dst_idx]
+  // map = is_src * base1 + belong * base2 + dst_idx
+  // base2 = num_seeds
+  // base1 = num_seeds * world_size
+  auto base2 = num_seeds;
+  auto base1 = base2 * world_size;
 
-  torch::Tensor dev_size, dev_offset, sorted_idx, permutation;
-  std::tie(dev_size, dev_offset, sorted_idx, permutation) =
-      ClusterAndPermute(rank, world_size, seeds, min_vids);
+  auto cuda_options = sorted_allnodes.options();
 
-  // All-to-all send sizes
-  auto arange = torch::arange(1, world_size + 1);
-  auto recv_sizes = torch::empty(world_size, cuda_tensor_option);
-  AlltoAll(dev_size, recv_sizes, arange, arange);
+  auto send_offset =
+      GetVirSendOffset(world_size, base2, sorted_allnodes, unique_frontier);
 
+  auto fir_uni = send_offset[2 * world_size + 1].item<IdType>();
+  auto send_sizes = send_offset.diff();
+  send_sizes.index_put_({2 * world_size}, fir_uni);
+
+  send_sizes = send_sizes.index({state->sp_alltoall_size_permute}).contiguous();
+
+  auto arange = torch::arange(1, world_size + 1) * 3;
+  auto recv_sizes = torch::empty_like(send_sizes);
+
+  AlltoAll(send_sizes, recv_sizes, arange, arange);
+  // all-to-all map_dst & (map_src & frontier)
+  send_sizes = send_sizes.to(torch::kCPU);
   recv_sizes = recv_sizes.to(torch::kCPU);
-  dev_size = dev_size.to(torch::kCPU);
-  auto recv_offset = recv_sizes.cumsum(0);
-  dev_offset = dev_offset.to(torch::kCPU);
-  auto recv_size = recv_offset[world_size - 1].item<IdType>();
-  auto recv_frontier = torch::empty(recv_size, cuda_tensor_option);
 
-  AlltoAll(sorted_idx, recv_frontier, dev_offset, recv_offset);
+  auto feat_recv_sizes = torch::sum(recv_sizes.index({torch::indexing::Slice(
+                                        2, torch::indexing::None, 3)}))
+                             .item<IdType>();
+  // total recv_size of map_allnodes(dst,src)
+  auto recv_size = torch::sum(recv_sizes).item<IdType>() - feat_recv_sizes;
 
-  auto local_neighbors = LocalSampleNeighbors(recv_frontier, fanout);
+  auto recv_allnodes = torch::empty(recv_size, cuda_options);
+  auto recv_dst_size =
+      SPSampleAlltoAll(send_frontier, recv_allnodes, send_sizes, recv_sizes);
+  // map src nodes
+  auto recv_src = recv_allnodes.index({torch::indexing::Slice(recv_dst_size)});
+  auto recv_dst =
+      recv_allnodes.index({torch::indexing::Slice(0, recv_dst_size)});
 
-  return {recv_frontier, local_neighbors, permutation, recv_offset, dev_offset};
+  auto ori_src = recv_src % num_total_nodes;
+  auto vir_src = recv_src.div(num_total_nodes, "trunc");
+
+  return {recv_dst, vir_src, ori_src, send_sizes, recv_sizes};
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-ShuffleSeeds(torch::Tensor min_vids, torch::Tensor seeds) {
+ShuffleSeeds(torch::Tensor seeds, IdType base1) {
   auto* state = NPCState::Global();
   int rank = state->rank;
   int world_size = state->world_size;
   auto cuda_tensor_option = seeds.options();
+  auto min_vids = state->min_vids;
 
   torch::Tensor dev_size, dev_offset, sorted_idx, permutation;
   std::tie(dev_size, dev_offset, sorted_idx, permutation) =
-      ClusterAndPermute(rank, world_size, seeds, min_vids);
+      ClusterAndPermute(world_size, base1, seeds, min_vids);
 
   // All-to-all send sizes
   auto arange = torch::arange(1, world_size + 1);
@@ -65,11 +117,48 @@ ShuffleSeeds(torch::Tensor min_vids, torch::Tensor seeds) {
   auto recv_offset = recv_sizes.cumsum(0);
   dev_offset = dev_offset.to(torch::kCPU);
   auto recv_size = recv_offset[world_size - 1].item<IdType>();
+
   auto recv_frontier = torch::empty(recv_size, cuda_tensor_option);
 
   AlltoAll(sorted_idx, recv_frontier, dev_offset, recv_offset);
-
   return {recv_frontier, permutation, recv_offset, dev_offset};
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+MPSampleShuffle(torch::Tensor seeds, torch::Tensor neighs) {
+  auto* state = NPCState::Global();
+  auto world_size = state->world_size;
+  auto rank = state->rank;
+  auto seeds_size = seeds.numel();
+  auto neigh_size = neighs.numel();
+  auto cuda_tensor_option = seeds.options();
+  // all gather send size
+  auto arange = torch::arange(1, world_size + 1) * 2;
+
+  auto send_size = torch::tensor({seeds_size, neigh_size}, cuda_tensor_option);
+  auto recv_size = AllGather(send_size).to(torch::kCPU);
+
+  auto recv_seeds_size =
+      recv_size.index({torch::indexing::Slice(0, torch::indexing::None, 2)})
+          .contiguous();
+
+  auto recv_neighs_size =
+      recv_size.index({torch::indexing::Slice(1, torch::indexing::None, 2)})
+          .contiguous();
+
+  // all boardcast seeds and neighbors
+  auto recv_seeds_total_size = torch::sum(recv_seeds_size).item<IdType>();
+  auto recv_neighs_total_size = torch::sum(recv_neighs_size).item<IdType>();
+
+  auto recv_seeds = torch::empty(recv_seeds_total_size, cuda_tensor_option);
+  auto recv_neighs = torch::empty(recv_neighs_total_size, cuda_tensor_option);
+  auto tensor_seeds_size = torch::tensor({seeds_size});
+  auto tensor_neighs_size = torch::tensor({neigh_size});
+
+  AllBroadcastV2(seeds, recv_seeds, tensor_seeds_size, recv_seeds_size);
+  AllBroadcastV2(neighs, recv_neighs, tensor_neighs_size, recv_neighs_size);
+
+  return {recv_seeds, recv_neighs, tensor_seeds_size, recv_seeds_size};
 }
 
 }  // namespace npc

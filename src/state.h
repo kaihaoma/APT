@@ -10,9 +10,9 @@ namespace npc {
 struct FeatStorage {
   torch::Tensor labels;
   torch::Tensor dev_feats, uva_feats, global_shared_feats;
-  torch::Tensor feat_pos_map;
+  torch::Tensor feat_pos_map, cpu_feat_pos_map;
   IdType num_dev_nodes, num_uva_nodes, num_graph_nodes, num_total_nodes;
-  IdType input_dim;
+  IdType feat_dim, rank_feat_dim, feat_dim_offset;
 };
 
 struct GraphStorage {
@@ -31,18 +31,32 @@ struct Profiler {
 
 struct NPCState {
   // nccl communication
-  int rank, world_size;
+  int rank, local_rank, world_size;
   ncclComm_t nccl_comm;
+  std::vector<ncclComm_t> nccl_comm_list;
+  int sampler_id, trainer_id, num_threads;
+  cudaStream_t nccl_stream, cuda_copy_stream;
+  std::vector<cudaStream_t> vec_cuda_stream;
+  // partition info
+  torch::Tensor min_vids;
   // node feats
   GraphStorage graph_storage;
   // graph topology
   FeatStorage feat_storage;
+  // SP alltoall permute
+  torch::Tensor sp_alltoall_size_permute;
+
+  // cross_machine_flag
+  bool cross_machine_flag;
+  int num_remote_workers;
+  torch::Tensor remote_worker_map;
+  std::vector<IdType> vec_remote_worker_id, vec_remote_worker_map;
 
   static NPCState *Global() {
     static NPCState state;
     return &state;
   }
-  // for log
+  // for logs
   std::string tag;
 };
 

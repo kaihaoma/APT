@@ -11,86 +11,53 @@
 
 namespace npc {
 
-void CacheFeats(
-    torch::Tensor node_feats, torch::Tensor sorted_idx, double cache_ratio,
-    IdType num_total_nodes) {
-  auto node_feat_sizes = node_feats.sizes();
-  IdType num_graph_nodes = node_feat_sizes[0];
-  IdType input_dim = node_feat_sizes[1];
-  auto* state = NPCState::Global();
-  int rank = state->rank;
-  IdType num_cached_nodes =
-      std::min(IdType(cache_ratio * num_total_nodes), num_graph_nodes);
-  LOG(INFO) << "Rank#" << rank << ": cache " << num_cached_nodes << " of "
-            << num_graph_nodes << ", ratio: " << cache_ratio;
-  state->feat_storage.num_total_nodes = num_total_nodes;
-  state->feat_storage.num_graph_nodes = num_graph_nodes;
-  state->feat_storage.num_dev_nodes = num_cached_nodes;
-  state->feat_storage.num_uva_nodes = num_graph_nodes - num_cached_nodes;
-  state->feat_storage.input_dim = input_dim;
-  state->feat_storage.dev_feats =
-      node_feats.index({torch::indexing::Slice(0, num_cached_nodes, 1)})
-          .to(torch::kCUDA, rank);
-  state->feat_storage.uva_feats =
-      node_feats
-          .index({torch::indexing::Slice(
-              num_cached_nodes, torch::indexing::None, torch::indexing::None)})
-          .pin_memory();
-  std::vector<IdType> vec_sorted_idx(
-      sorted_idx.data_ptr<IdType>(),
-      sorted_idx.data_ptr<IdType>() + sorted_idx.numel());
-  std::vector<IdType> host_feat_pos_map(num_total_nodes, -1);
-  for (int i = 0; i < num_cached_nodes; ++i) {
-    host_feat_pos_map[vec_sorted_idx[i]] = i;
-  }
-
-  for (int i = num_cached_nodes; i < num_graph_nodes; ++i) {
-    host_feat_pos_map[vec_sorted_idx[i]] = ENCODE_ID(i - num_cached_nodes);
-  }
-  torch::Tensor a = state->feat_storage.feat_pos_map =
-      torch::from_blob(
-          host_feat_pos_map.data(), {num_total_nodes},
-          torch::TensorOptions().dtype(torch::kInt64))
-          .to(torch::kCUDA, rank);
-  //.pin_memory();
-}
-
 void CacheFeatsShared(
-    torch::Tensor global_node_feats, torch::Tensor cached_feats,
-    torch::Tensor cached_idx) {
-  auto node_feat_sizes = global_node_feats.sizes();
-  IdType num_total_nodes = node_feat_sizes[0];
-  IdType input_dim = node_feat_sizes[1];
-  IdType num_cached_nodes = cached_idx.numel();
+    IdType num_total_nodes, torch::Tensor localnode_feats,
+    torch::Tensor cached_feats, torch::Tensor cached_idx,
+    torch::Tensor localnode_idx, IdType feat_dim_offset) {
+  auto localnode_feat_sizes = localnode_feats.sizes();
+  auto cached_feat_sizes = cached_feats.sizes();
+  IdType num_localnode_nodes = localnode_feat_sizes[0];
+  IdType feat_dim = localnode_feat_sizes[1];
+  IdType num_cached_nodes = cached_feat_sizes[0];
+  IdType rank_feat_dim = cached_feat_sizes[1];
   auto* state = NPCState::Global();
-  int rank = state->rank;
-  LOG(INFO) << "Cache #" << num_cached_nodes << "\t of " << num_total_nodes
-            << "\n";
+
+  int local_rank = state->rank;
+  LOG(INFO) << "Cache #" << num_cached_nodes << "\t of uva"
+            << num_localnode_nodes << "\t #total: " << num_total_nodes << "\n";
+  LOG(INFO) << "cached_idx: " << cached_idx.numel()
+            << "\tinput_dim: " << rank_feat_dim << "\n";
+  LOG(INFO) << "localnode shape: " << localnode_feat_sizes[0] << ", "
+            << localnode_feat_sizes[1]
+            << "\t feat_dim_offset: " << feat_dim_offset << "\n";
   state->feat_storage.num_total_nodes = num_total_nodes;
-  // state->feat_storage.num_graph_nodes = num_graph_nodes;
+  state->feat_storage.num_uva_nodes = num_localnode_nodes;
   state->feat_storage.num_dev_nodes = num_cached_nodes;
-  state->feat_storage.input_dim = input_dim;
   state->feat_storage.dev_feats = cached_feats;
-  state->feat_storage.uva_feats = global_node_feats;
-  // LOG(INFO) << "dev_feats: options: " <<
-  // state->feat_storage.dev_feats.is_pinned(); LOG(INFO) << "uva_feats: " <<
-  // state->feat_storage.uva_feats.is_pinned();
-  std::vector<IdType> vec_sorted_idx(
+  state->feat_storage.uva_feats = localnode_feats;
+  state->feat_storage.feat_dim = feat_dim;
+  state->feat_storage.rank_feat_dim = rank_feat_dim;
+  state->feat_storage.feat_dim_offset = feat_dim_offset;
+  std::vector<IdType> vec_cached_idx(
       cached_idx.data_ptr<IdType>(),
       cached_idx.data_ptr<IdType>() + cached_idx.numel());
-  std::vector<IdType> host_feat_pos_map(num_total_nodes, -1);
-  for (int i = 0; i < num_total_nodes; ++i) {
-    host_feat_pos_map[i] = ENCODE_ID(i);
+  std::vector<IdType> vec_localnode_idx(
+      localnode_idx.data_ptr<IdType>(),
+      localnode_idx.data_ptr<IdType>() + localnode_idx.numel());
+  std::vector<IdType> host_feat_pos_map(num_total_nodes, FEAT_NOT_EXIST);
+  for (int i = 0; i < num_localnode_nodes; ++i) {
+    host_feat_pos_map[vec_localnode_idx[i]] = ENCODE_ID(i);
   }
+  state->feat_storage.cpu_feat_pos_map = torch::tensor(host_feat_pos_map);
   for (int i = 0; i < num_cached_nodes; ++i) {
-    host_feat_pos_map[vec_sorted_idx[i]] = i;
+    host_feat_pos_map[vec_cached_idx[i]] = i;
   }
-
   state->feat_storage.feat_pos_map =
       torch::from_blob(
           host_feat_pos_map.data(), {num_total_nodes},
           torch::TensorOptions().dtype(torch::kInt64))
-          .to(torch::kCUDA, rank);
+          .to(torch::kCUDA, local_rank);
 }
 
 }  // namespace npc

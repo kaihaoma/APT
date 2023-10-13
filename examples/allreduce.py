@@ -13,24 +13,51 @@ def kill_proc(p):
         pass
 
 
-def run(rank, world_size, shared_queue):
-    world_size = 2
-    utils.setup(rank, world_size)
+def run(rank, world_size, args):
+    local_rank = rank
+    device = torch.device(f"cuda:{local_rank}")
+    utils.setup(rank=rank, local_rank=local_rank, world_size=world_size, args=args)
 
-    npc.init(rank=rank, world_size=world_size, shared_queue=shared_queue, init_mp=True)
-    device = torch.device(f'cuda:{rank}')
-    a = torch.ones([3], dtype=torch.int64).to(device)
+    npc.init(
+        rank=rank,
+        local_rank=local_rank,
+        world_size=world_size,
+        device=device,
+        init_mp=True,
+    )
 
-    a = npc.allreduce(a)
-    print(a)
+    send_offset = torch.arange(1, world_size + 1).cumsum(0)
+    recv_offset = torch.full((world_size,), rank + 1).cumsum(0)
+    feat_dim = 2
+    num_input = torch.sum(send_offset).item()
+    input = torch.arange(feat_dim * num_input, dtype=torch.float32).reshape(
+        num_input, feat_dim
+    ) * (1 + rank)
+    input = input.to(device)
+    print(
+        f"[Note]input:{input}\t send:{send_offset}\t recv:{recv_offset}\t feat_dim:{feat_dim}"
+    )
+
+    ret = npc.mp_feat_shuffle(
+        input=input,
+        send_offset=send_offset,
+        recv_offset=recv_offset,
+        feat_dim=feat_dim,
+    )
+    print(f"[Note]mp feat shuffle: {ret}")
 
 
-if __name__ == '__main__':
-    nproc = 2
+if __name__ == "__main__":
+    nproc = 4
+    args = utils.init_args()
     processes = []
     mp.set_start_method("spawn", force=True)
-    q = mp.Queue()
-    mp.spawn(run,
-             args=(nproc, q,),
-             nprocs=nproc,
-             join=True)
+    mp.spawn(
+        run,
+        args=(
+            nproc,
+            args,
+        ),
+        nprocs=nproc,
+        join=True,
+    )

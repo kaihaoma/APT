@@ -15,17 +15,25 @@ namespace npc {
 TORCH_LIBRARY(npc, m) {
   m.def("nccl_get_unique_id", &NCCLGetUniqueId)
       .def("init", &Initialize)
-      .def("allreduce", &Allreduce)
-      .def("cache_feats", &CacheFeats)
+      .def("alltoall", &AlltoAll)
       .def("cache_feats_shared", &CacheFeatsShared)
-      .def("cache_graphs", &CacheGraphs)
       .def("mix_cache_graphs", &MixCacheGraphs)
+      .def("register_min_vids", &RegisterMinVids)
+      .def("register_multi_machines_scheme", &RegisterMultiMachinesScheme)
+      .def("cpu_load_subtensor", &CPULoadSubtensor)
       .def("load_subtensor", &LoadSubtensor)
+      .def("crossmachine_load_subtensor", &CrossMachineLoadSubtensor)
+      .def("cluster_reqs", &ClusterReqs)
       .def("local_sample_one_layer", &LocalSamplingNeibhorsOneLayer)
-      .def("sample_neighbors", &SamplingNeighbors)
+      .def("srcdst_to_vir", &SrcDsttoVir)
+      .def("np_sample_and_shuffle", &NPSampleAndShuffle)
+      .def("sp_sample_and_shuffle", &SPSampleAndShuffle)
+      .def("mp_sample_shuffle", &MPSampleShuffle)
       .def("feat_shuffle", &FeatShuffle)
-      .def("shuffle_seeds", &ShuffleSeeds)
-      .def("test", &Test);
+      .def("sp_feat_shuffle", &SPFeatShuffle)
+      .def("mp_feat_shuffle_fwd", &MPFeatShuffleFwd)
+      .def("mp_feat_shuffle_bwd", &MPFeatShuffleBwd)
+      .def("shuffle_seeds", &ShuffleSeeds);
 }
 
 }  // namespace npc

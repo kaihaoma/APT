@@ -5,12 +5,20 @@
 
 #include <string>
 
+#include "utils.h"
+
 namespace npc {
 
 torch::Tensor NCCLGetUniqueId();
 
-void Initialize(int64_t rank, int64_t world_size, torch::Tensor nccl_id_tensor);
-void Test(torch::Tensor test_tensor, torch::Tensor perm);
+void Initialize(
+    IdType rank, IdType local_rank, IdType world_size,
+    torch::Tensor nccl_id_tensor_list);
+
+void RegisterMinVids(torch::Tensor min_vids);
+
+void RegisterMultiMachinesScheme(
+    torch::Tensor remote_worker_map, torch::Tensor remote_worker_id);
 }  // namespace npc
 
 #endif

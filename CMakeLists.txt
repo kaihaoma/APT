@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.20)
 project(npc CXX CUDA)
 
 # Pytorch 
 file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/find_torch.py FIND_TORCH_PY)
 execute_process(
-  COMMAND python3 ${FIND_TORCH_PY}
+  COMMAND python ${FIND_TORCH_PY}
   OUTPUT_VARIABLE TORCH_PREFIX_VER
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 message(STATUS "find_torch.py output: ${TORCH_PREFIX_VER}")
@@ -13,6 +13,7 @@ list(GET TORCH_PREFIX_VER 1 TORCH_VER)
 message(STATUS "Configuring for PyTorch ${TORCH_VER}")
 set(Torch_DIR "${TORCH_PREFIX}/Torch")
 find_package(Torch REQUIRED)
+list(APPEND NPC_LINKER_LIBS ${TORCH_LIBRARIES})
 
 # GLOG
 find_path(glog_INCLUDE_DIR NAMES glog/logging.h)
@@ -27,7 +28,17 @@ else()
   message(FATAL_ERROR "glog not found")
 endif()
 
-list(APPEND NPC_LINKER_LIBS ${TORCH_LIBRARIES})
+#cmake_policy(SET CMP0148 OLD)
+#find_package(PythonLibs REQUIRED)
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
+message(STATUS "Python include dir: ${Python_INCLUDE_DIRS}")
+message(STATUS "Python libraries: ${Python_LIBRARIES}")
+#include_directories(${PYTHON_INCLUDE_DIRS})
+#target_link_libraries(<your exe or lib> ${PYTHON_LIBRARIES})
+list(APPEND NPC_INCLUDES ${Python_INCLUDE_DIRS})
+list(APPEND NPC_LINKER_LIBS ${Python_LIBRARIES})
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TORCH_C_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g3 -ggdb")
@@ -52,6 +63,7 @@ find_package(MPI REQUIRED)
 message(STATUS "MPI_INCLUDE_PATH -- ${MPI_INCLUDE_PATH}")
 message(STATUS "MPI_CXX_LIBRARIES -- ${MPI_CXX_LIBRARIES}")
 add_subdirectory(third_party/googletest)
+
 enable_testing()
 include_directories(third_party/googletest/googletest/include)
 include_directories("src")

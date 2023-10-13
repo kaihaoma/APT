@@ -9,13 +9,10 @@
 
 namespace npc {
 
-void CacheFeats(
-    torch::Tensor node_feats, torch::Tensor sorted_idx, double cached_ratio,
-    IdType num_total_nodes);
-
 void CacheFeatsShared(
-    torch::Tensor global_node_feats, torch::Tensor cached_feats,
-    torch::Tensor cached_idx);
+    IdType num_total_nodes, torch::Tensor localnode_feats,
+    torch::Tensor cached_feats, torch::Tensor cached_idx,
+    torch::Tensor localnode_idx, IdType feat_dim_offset = 0);
 }  // namespace npc
 
 #endif

@@ -2,7 +2,10 @@
 #define NPC_UTILS_H_
 
 #include <cuda_runtime.h>
+#include <glog/logging.h>
+#include <thrust/device_vector.h>
 #include <torch/custom_class.h>
+#include <torch/extension.h>
 #include <torch/script.h>
 
 #include <string>
@@ -14,6 +17,15 @@ using DataType = float;
 #define ENCODE_ID(i) (-(i)-2)
 const int FEAT_ON_UVA = 0;
 const int FEAT_ON_DEV = 1;
+const int FEAT_NOT_EXIST = -1;
+const int FEAT_ON_LOCAL_DEV = 0;
+
+enum SystemType {
+  kDataParallel,
+  kNodeParallel,
+  kSplitParallel,
+  kModelParallel
+};
 
 #define CUDACHECK(cmd)                                      \
   do {                                                      \
@@ -36,6 +48,18 @@ const int FEAT_ON_DEV = 1;
 
 namespace npc {
 
+inline std::string TensorMaxMinToString(torch::Tensor t) {
+  auto maxx = torch::max(t).item<IdType>();
+  auto minn = torch::min(t).item<IdType>();
+  std::string ret = "#: ";
+  ret += std::to_string(t.numel());
+  ret += "\tmax: ";
+  ret += std::to_string(maxx);
+  ret += "\tmin: ";
+  ret += std::to_string(minn);
+  return ret;
+}
+
 template <typename T>
 std::string VecToString(const std::vector<T> &vec) {
   std::string ret = "[";
@@ -47,10 +71,25 @@ std::string VecToString(const std::vector<T> &vec) {
   return ret;
 }
 
+template <typename T>
+std::string ThrustVecToString(const thrust::device_vector<T> &device_vids) {
+  std::vector<T> vids(device_vids.size());
+  thrust::copy(device_vids.begin(), device_vids.end(), vids.begin());
+  return VecToString(vids);
+}
+
 inline std::string TensorToString(torch::Tensor t) {
-  std::vector<IdType> vec_tensor(
-      t.data_ptr<IdType>(), t.data_ptr<IdType>() + t.numel());
-  return VecToString(vec_tensor);
+  t = t.to(torch::kCPU);
+
+  if (t.dtype() == torch::kLong) {
+    std::vector<IdType> vec_tensor(
+        t.data_ptr<IdType>(), t.data_ptr<IdType>() + t.numel());
+    return VecToString(vec_tensor);
+  } else if (t.dtype() == torch::kFloat32) {
+    std::vector<DataType> vec_tensor(
+        t.data_ptr<DataType>(), t.data_ptr<DataType>() + t.numel());
+    return VecToString(vec_tensor);
+  }
 }
 
 template <typename T>
