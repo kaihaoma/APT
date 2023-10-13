@@ -1,0 +1,9 @@
+{
+    "name": "igblarge_w8_metis",
+    "num_workers": 8,
+    "world_size": 8,
+    "num_classes": 19,
+    "input_dim": 128,
+    "min_vids": "0,12598807,25474104,38347989,51187467,62210538,74641053,87124443,100000000",
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/igblarge_w8_metis/igblarge_metis.bin"
+}

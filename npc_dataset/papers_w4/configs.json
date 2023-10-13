@@ -1,0 +1,10 @@
+{
+    "name": "papers",
+    "num_workers": 4,
+    "world_size": 4,
+    "num_classes": 172,
+    "min_vids": "0,28842663,54987214,82217330,111059956",
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w4/ogbn-papers100M4_pure.bin",
+    "sampling_path": "/efs/khma/Projects/NPC/sampling_all/npc2/papers_w4",
+    "idx_mem_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w4/papersM4_sorted_idx_mem.pt"
+}

@@ -1,0 +1,7 @@
+{
+    "name": "toygraph",
+    "num_workers": 4,
+    "world_size": 4,
+    "min_vids": "0,6,12,18,24",
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/toy_graph/toy_graph.bin"
+}

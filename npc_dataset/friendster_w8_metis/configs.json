@@ -1,0 +1,9 @@
+{
+    "name": "friendster_w8_metis",
+    "num_workers": 8,
+    "world_size": 8,
+    "num_classes": 3,
+    "input_dim": 256,
+    "min_vids": "0,7071316,15629777,24188610,32747452,39969624,48528130,57086860,65608366",
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/friendster_w8_metis/friendster_metis.bin"
+}

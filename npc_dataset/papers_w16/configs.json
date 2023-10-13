@@ -1,0 +1,10 @@
+{
+    "name": "papers",
+    "num_workers": 16,
+    "world_size": 16,
+    "num_classes": 172,
+    "min_vids": "0,7243782,14483192,21544302,28788318,36031208,43162828,50183058,56926957,63888531,71132170,78285964,82622350,89857761, 97010171,104249402,111059956",
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w16/papers_w16-pure.bin",
+    "sampling_path": "/efs/khma/Projects/NPC/sampling_all/npc2/papers_w16/papers",
+    "idx_mem_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w16/sorted_idx_mem.pt"
+}

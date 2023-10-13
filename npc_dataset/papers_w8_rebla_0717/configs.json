@@ -1,0 +1,10 @@
+{
+    "name": "papers",
+    "num_workers": 8,
+    "world_size": 8,
+    "num_classes": 172,
+    "min_vids": "0,14367223,26843300,41304969,54101845,68583781,83065724,97510368,111059956",
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w8_rebla_0717/rebla-papers-pure.bin",
+    "sampling_path": "/efs/khma/Projects/NPC/sampling_all/npc2/papers_w8_rebla_0717/rebla-papers",
+    "idx_mem_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w8_rebla_0717/sorted_idx_mem.pt"
+}
