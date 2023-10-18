@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(npc CXX CUDA)
+set(CMAKE_CXX_STANDARD 14)
+
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
 
 # Pytorch 
 file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/find_torch.py FIND_TORCH_PY)

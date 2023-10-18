@@ -9,3 +9,4 @@ logs
 npc_dataset
 sampling_all
 ./misc
+.bashrc
