@@ -70,6 +70,31 @@ def run_bidirection(rank, world_size, backend, data_size):
     )
 
 
+def run_bidirection_mixed(rank, world_size, backend, data_size):
+    def run_once():
+        input = torch.randn(data_size, dtype=torch.float32, device=f"cuda:{rank}")
+        output = torch.randn(data_size, dtype=torch.float32, device=f"cuda:{rank}")
+
+        t1_time = time.time()
+        dist.all_to_all_single(output, input)
+        # Wait for all data to be sent
+        torch.cuda.synchronize(device=f"cuda:{rank}")
+        return time.time() - t1_time
+
+    # execute a few rounds of warmup
+    warmup_time = 0.0
+    for _ in range(2):
+        warmup_time += run_once()
+    # measure runtime
+    benchmark_time = []
+    for _ in range(10):
+        benchmark_time.append(run_once())
+
+    print(
+        f"Rank: {rank} | Backend: {backend} | Data Vol.: {(data_size * 4) / 1000} KB | Warmup: {(warmup_time):.3f} s | Max: {np.max(benchmark_time):.5f} s | Min: {np.min(benchmark_time):.5f} s | Avg: {np.mean(benchmark_time):.5f} s"
+    )
+
+
 def init_process(rank, size, fn, backend, data_size):
     """Initialize the distributed environment."""
     os.environ["MASTER_ADDR"] = "172.31.31.32"
