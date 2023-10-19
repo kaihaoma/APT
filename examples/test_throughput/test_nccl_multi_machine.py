@@ -35,7 +35,7 @@ def run_unidirection(rank, world_size, backend, data_size):
         benchmark_time.append(run_once())
 
     print(
-        f"Rank: {rank} | Backend: {backend} | Data Vol.: {(data_size * 4) / 1000} KB | Warmup: {(warmup_time):.3f} s | Max: {np.max(benchmark_time):.5f} s | Min: {np.min(benchmark_time):.5f} s | Avg: {np.mean(benchmark_time):.5f} s"
+        f"Rank: {rank} | Backend: {backend} | Data Vol.: {(data_size * 4) / (1000 * 1000)} MB | Warmup: {(warmup_time):.3f} s | Max: {np.max(benchmark_time):.5f} s | Min: {np.min(benchmark_time):.5f} s | Avg: {np.mean(benchmark_time):.5f} s"
     )
 
 
@@ -66,7 +66,7 @@ def run_bidirection(rank, world_size, backend, data_size):
         benchmark_time.append(run_once())
 
     print(
-        f"Rank: {rank} | Backend: {backend} | Data Vol.: {(data_size * 4) / 1000} KB | Warmup: {(warmup_time):.3f} s | Max: {np.max(benchmark_time):.5f} s | Min: {np.min(benchmark_time):.5f} s | Avg: {np.mean(benchmark_time):.5f} s"
+        f"Rank: {rank} | Backend: {backend} | Data Vol.: {(data_size * 4) / (1000 * 1000)} MB | Warmup: {(warmup_time):.3f} s | Max: {np.max(benchmark_time):.5f} s | Min: {np.min(benchmark_time):.5f} s | Avg: {np.mean(benchmark_time):.5f} s"
     )
 
 
@@ -91,7 +91,7 @@ def run_bidirection_mixed(rank, world_size, backend, data_size):
         benchmark_time.append(run_once())
 
     print(
-        f"Rank: {rank} | Backend: {backend} | Data Vol.: {(data_size * 4) / 1000} KB | Warmup: {(warmup_time):.3f} s | Max: {np.max(benchmark_time):.5f} s | Min: {np.min(benchmark_time):.5f} s | Avg: {np.mean(benchmark_time):.5f} s"
+        f"Rank: {rank} | Backend: {backend} | Data Vol.: {(data_size * 4) / (1000 * 1000)} MB | Warmup: {(warmup_time):.3f} s | Max: {np.max(benchmark_time):.5f} s | Min: {np.min(benchmark_time):.5f} s | Avg: {np.mean(benchmark_time):.5f} s"
     )
 
 
