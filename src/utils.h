@@ -89,6 +89,9 @@ inline std::string TensorToString(torch::Tensor t) {
     std::vector<DataType> vec_tensor(
         t.data_ptr<DataType>(), t.data_ptr<DataType>() + t.numel());
     return VecToString(vec_tensor);
+  } else {
+    LOG(FATAL) << "Not Implemented Error";
+    return {};
   }
 }
 
