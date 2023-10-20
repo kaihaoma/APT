@@ -93,6 +93,9 @@ IdType SPSampleAlltoAll(
         input.data_ptr<DataType>(), output.data_ptr<DataType>(),
         send_sizes.data_ptr<IdType>(), recv_sizes.data_ptr<IdType>(), expand,
         comm_type);
+  } else {
+    LOG(FATAL) << "Not Implemented Error";
+    return {};
   }
 }
 

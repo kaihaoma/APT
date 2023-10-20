@@ -193,9 +193,7 @@ def cache_adj_and_feats(
 
     # [TODO] "costmodel" assume all node feats stored in localnode uva
     if args.cache_mode == "costmodel":
-        sorted_idx = torch.load(
-            os.path.join(args.sorted_idx_path, f"{rank}_sorted_idx.pt")
-        )
+        sorted_idx = torch.load(os.path.join(args.sorted_idx_path, f"{rank}_sorted_idx.pt"))
         sorted_mem_usage = torch.load(args.idx_mem_path)[sorted_idx]
         cumsum_sorted_mem_usage = torch.cumsum(sorted_mem_usage, dim=0)
 
@@ -203,25 +201,17 @@ def cache_adj_and_feats(
             0,
             (torch.max(cumsum_sorted_mem_usage > args.cache_memory, 0)[1].item() - 1),
         )
-        print(
-            f"[Note]num_cache_nodes:{num_cache_nodes}\t cache_memory:{args.cache_memory}"
-        )
+        print(f"[Note]num_cache_nodes:{num_cache_nodes}\t cache_memory:{args.cache_memory}")
 
         sorted_idx = sorted_idx[:num_cache_nodes]
         cache_feat_node_idx = sorted_idx[sorted_idx < num_total_nodes]
-        cache_graph_node_idx = (
-            sorted_idx[sorted_idx >= num_total_nodes] - num_total_nodes
-        )
+        cache_graph_node_idx = sorted_idx[sorted_idx >= num_total_nodes] - num_total_nodes
         num_cached_feat_nodes = cache_feat_node_idx.numel()
         num_cached_graph_nodes = cache_graph_node_idx.numel()
     # [TODO] "costmodel" assume all node feats stored in localnode uva
     elif args.cache_mode == "greedy":
         mem_usage = torch.load(args.idx_mem_path)
-        data = torch.load(
-            os.path.join(
-                args.greedy_sorted_idx_path, f"rk#{rank}costmodel_sorted_idx.pt"
-            )
-        )
+        data = torch.load(os.path.join(args.greedy_sorted_idx_path, f"rk#{rank}costmodel_sorted_idx.pt"))
         feat_idx = data[0]
         graph_idx = data[1]
         sorted_feat_mem = torch.cumsum(mem_usage[feat_idx], dim=0)
@@ -231,10 +221,7 @@ def cache_adj_and_feats(
         ub = num_total_nodes
         while ub > lb + 1:
             mid = int((ub + lb) // 2)
-            total_mem = (
-                sorted_feat_mem[int(mid * args.greedy_feat_ratio)]
-                + sorted_graph_mem[int(mid * (1 - args.greedy_feat_ratio))]
-            ).item()
+            total_mem = (sorted_feat_mem[int(mid * args.greedy_feat_ratio)] + sorted_graph_mem[int(mid * (1 - args.greedy_feat_ratio))]).item()
 
             if total_mem <= args.cache_memory:
                 lb = mid
@@ -263,18 +250,12 @@ def cache_adj_and_feats(
 
         # Split Para: caching canditate nodes: local nodes
         system_to_id = {"DP": 0, "NP": 1, "SP": 2, "MP": 3}
-        node_feats_freqs = torch.load(args.dp_freqs_path)[system_to_id[args.system]][
-            rank
-        ][1]
-        sorted_node_feats_freq, sorted_idx = torch.sort(
-            node_feats_freqs, descending=True
-        )
+        node_feats_freqs = torch.load(args.dp_freqs_path)[system_to_id[args.system]][rank][1]
+        sorted_node_feats_freq, sorted_idx = torch.sort(node_feats_freqs, descending=True)
         base = 1
         if args.system == "MP":
             base = args.world_size
-        num_cached_feat_nodes = int(
-            args.cache_memory * base / (args.input_dim * BYTES_PER_ELEMENT)
-        )
+        num_cached_feat_nodes = int(args.cache_memory * base / (args.input_dim * BYTES_PER_ELEMENT))
 
         cache_feat_node_idx = sorted_idx[:num_cached_feat_nodes]
     elif args.cache_mode == "dryrun":
@@ -295,7 +276,9 @@ def cache_adj_and_feats(
 
         # if args.system in ["DP", "NP"]:
         if args.system in ["NP"]:
-            caching_candidate_path = f"{args.caching_candidate_path_prefix}/{sys_to_key(args.system)}_{config_key}_{replace_whitespace(args.fan_out)}/rk#{rank}_epo100.pt"
+            caching_candidate_path = (
+                f"{args.caching_candidate_path_prefix}/{sys_to_key(args.system)}_{config_key}_{replace_whitespace(args.fan_out)}/rk#{rank}_epo100.pt"
+            )
             node_feats_freqs = torch.load(caching_candidate_path)[1]
         else:
             ori_freq_lists = [
@@ -309,17 +292,11 @@ def cache_adj_and_feats(
                 node_feats_freqs = sum_freq_lists
             elif args.system == "SP":
                 node_feats_freqs = torch.zeros(num_total_nodes, dtype=torch.long)
-                node_feats_freqs[
-                    args.min_vids[rank] : args.min_vids[rank + 1]
-                ] = sum_freq_lists[args.min_vids[rank] : args.min_vids[rank + 1]]
+                node_feats_freqs[args.min_vids[rank] : args.min_vids[rank + 1]] = sum_freq_lists[args.min_vids[rank] : args.min_vids[rank + 1]]
 
-        sorted_node_feats_freq, sorted_idx = torch.sort(
-            node_feats_freqs, descending=True
-        )
+        sorted_node_feats_freq, sorted_idx = torch.sort(node_feats_freqs, descending=True)
         del sorted_node_feats_freq
-        local_sorted_idx = torch.masked_select(
-            sorted_idx, localnode_feats_idx_mask[sorted_idx]
-        )
+        local_sorted_idx = torch.masked_select(sorted_idx, localnode_feats_idx_mask[sorted_idx])
         base = args.world_size if args.system == "MP" else 1
         num_cached_feat_nodes = min(
             local_sorted_idx.numel(),
@@ -330,15 +307,11 @@ def cache_adj_and_feats(
     else:
         num_localnodes = localnode_feats_idx.numel()
         num_cached_feat_nodes = int(args.feat_cache_ratio * num_localnodes)
-        rand_cache_feat_node_idx = torch.randperm(num_localnodes)[
-            :num_cached_feat_nodes
-        ]
+        rand_cache_feat_node_idx = torch.randperm(num_localnodes)[:num_cached_feat_nodes]
         cache_feat_node_idx = localnode_feats_idx[rand_cache_feat_node_idx]
         num_cached_graph_nodes = 0
         cache_graph_node_idx = torch.tensor([], dtype=torch.long)
-        print(
-            f"[Note]Random cache mode, no cache adj. and random cache feats: {num_cached_feat_nodes} of {num_localnodes}"
-        )
+        print(f"[Note]Random cache mode, no cache adj. and random cache feats: {num_cached_feat_nodes} of {num_localnodes}")
     return cache_feat_node_idx, cache_graph_node_idx
 
 
@@ -390,40 +363,24 @@ def load_partition(
     )
     num_cached_feat_nodes = cache_feat_node_idx.numel()
     num_cached_graph_nodes = cache_graph_node_idx.numel()
-    print(
-        f"[Note]{args.cache_mode}: #feats:{num_cached_feat_nodes}\t #graphs:{num_cached_graph_nodes}\t Mem:{get_total_mem_usage_in_gb()}"
-    )
+    print(f"[Note]{args.cache_mode}: #feats:{num_cached_feat_nodes}\t #graphs:{num_cached_graph_nodes}\t Mem:{get_total_mem_usage_in_gb()}")
     dist.barrier()
-    if (
-        args.max_cache_feat_nodes >= 0
-        and num_cached_feat_nodes > args.max_cache_feat_nodes
-    ):
+    if args.max_cache_feat_nodes >= 0 and num_cached_feat_nodes > args.max_cache_feat_nodes:
         num_cached_feat_nodes = args.max_cache_feat_nodes
         cache_feat_node_idx = cache_feat_node_idx[:num_cached_feat_nodes]
 
-    if (
-        args.max_cache_graph_nodes >= 0
-        and num_cached_graph_nodes > args.max_cache_graph_nodes
-    ):
+    if args.max_cache_graph_nodes >= 0 and num_cached_graph_nodes > args.max_cache_graph_nodes:
         num_cached_graph_nodes = args.max_cache_graph_nodes
         cache_graph_node_idx = cache_graph_node_idx[:num_cached_graph_nodes]
 
-    print(
-        f"[Note]Force Limit{args.cache_mode}: #feats:{num_cached_feat_nodes}\t #graphs:{num_cached_graph_nodes}\t"
-    )
+    print(f"[Note]Force Limit{args.cache_mode}: #feats:{num_cached_feat_nodes}\t #graphs:{num_cached_graph_nodes}\t")
     # cache graph
     if num_cached_graph_nodes > 0:
-        cache_indptr = torch.hstack(
-            [indptr[pt + 1] - indptr[pt] for pt in cache_graph_node_idx]
-        )
+        cache_indptr = torch.hstack([indptr[pt + 1] - indptr[pt] for pt in cache_graph_node_idx])
 
-        cache_indptr = torch.cat(
-            [torch.LongTensor([0]), torch.cumsum(cache_indptr, dim=0)]
-        ).to(device)
+        cache_indptr = torch.cat([torch.LongTensor([0]), torch.cumsum(cache_indptr, dim=0)]).to(device)
 
-        cache_indices = torch.cat(
-            [indices[indptr[pt] : indptr[pt + 1]] for pt in cache_graph_node_idx]
-        ).to(device)
+        cache_indices = torch.cat([indices[indptr[pt] : indptr[pt + 1]] for pt in cache_graph_node_idx]).to(device)
 
     else:
         cache_indptr = torch.empty(0, dtype=torch.long)
@@ -452,9 +409,7 @@ def load_partition(
     cache_feat_node_pos = localnode_feat_pos[cache_feat_node_idx]
 
     if args.system == "MP":
-        print(
-            f"[Note]cumsum_feat_dim:{args.cumsum_feat_dim}\t my:{args.cumsum_feat_dim[rank]} - {args.cumsum_feat_dim[rank+1]}"
-        )
+        print(f"[Note]cumsum_feat_dim:{args.cumsum_feat_dim}\t my:{args.cumsum_feat_dim[rank]} - {args.cumsum_feat_dim[rank+1]}")
         cached_feats = localnode_feats[
             cache_feat_node_pos,
             args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1],
@@ -478,25 +433,17 @@ def load_partition(
 
     # rebalance train_nid
     if args.rebalance_train_nid:
-        all_train_nid = torch.masked_select(
-            torch.arange(num_total_nodes), global_train_mask
-        )
+        all_train_nid = torch.masked_select(torch.arange(num_total_nodes), global_train_mask)
         (num_all_train_nids,) = all_train_nid.shape
         num_train_nids_per_rank = num_all_train_nids // args.world_size
-        global_train_nid = all_train_nid[
-            rank * num_train_nids_per_rank : (rank + 1) * num_train_nids_per_rank
-        ]
+        global_train_nid = all_train_nid[rank * num_train_nids_per_rank : (rank + 1) * num_train_nids_per_rank]
         # ref:
-        num_trains_bef = torch.sum(
-            global_train_mask[min_vids_list[rank] : min_vids_list[rank + 1]]
-        ).item()
+        num_trains_bef = torch.sum(global_train_mask[min_vids_list[rank] : min_vids_list[rank + 1]]).item()
         num_trains_aft = torch.numel(global_train_nid)
         print(f"[Note]#trains before:{num_trains_bef}\t after:{num_trains_aft}")
 
     else:
-        local_train_mask = global_train_mask[
-            min_vids_list[rank] : min_vids_list[rank + 1]
-        ]
+        local_train_mask = global_train_mask[min_vids_list[rank] : min_vids_list[rank + 1]]
         global_train_nid = torch.masked_select(global_nodes_id, local_train_mask)
 
     print(f"[Note]Rank#{rank} after rebalance")
@@ -510,7 +457,7 @@ def load_partition(
 
     # register multi-machines scheme & send & recv thread
     multi_machines_comm_list = None
-    if args.multi_machines_flag:
+    if args.cross_machine_feat_load:
         register_multi_machines_scheme(args)
         """
         # multi-machines send & recv thread
@@ -559,16 +506,10 @@ def register_min_vids(min_vids: torch.Tensor) -> None:
 
 
 def register_multi_machines_scheme(args: argparse.Namespace) -> Optional[torch.Tensor]:
-    gpu_remote_worker_map = torch.tensor(args.remote_worker_map).to(
-        f"cuda:{args.local_rank}"
-    )
+    gpu_remote_worker_map = torch.tensor(args.remote_worker_map).to(f"cuda:{args.local_rank}")
     remote_worker_id = torch.tensor(args.remote_worker_id)
-    print(
-        f"[INFO] gpu_remote_worker_map:{gpu_remote_worker_map}\t remote_worker_id:{remote_worker_id}"
-    )
-    torch.ops.npc.register_multi_machines_scheme(
-        gpu_remote_worker_map, remote_worker_id
-    )
+    print(f"[INFO] gpu_remote_worker_map:{gpu_remote_worker_map}\t remote_worker_id:{remote_worker_id}")
+    torch.ops.npc.register_multi_machines_scheme(gpu_remote_worker_map, remote_worker_id)
 
 
 # custom gloo all-to-all by (gloo.send, gloo.recv)
@@ -587,7 +528,7 @@ def _load_subtensorV2(
     seeds: torch.Tensor,
     multi_machine_comm_list,
 ) -> torch.Tensor:
-    if not args.multi_machines_flag:
+    if not args.cross_machine_feat_load:
         return torch.ops.npc.load_subtensor(seeds)
     else:
         # multi-machine load subtensor
@@ -645,9 +586,7 @@ def _load_subtensorV2(
         input_split_sizes = [v * input_dim for v in input_split_sizes]
         output_split_sizes = [v * input_dim for v in output_split_sizes]
 
-        recv_remote_subtensor = torch.empty(
-            send_req_size * input_dim, dtype=torch.float32
-        )
+        recv_remote_subtensor = torch.empty(send_req_size * input_dim, dtype=torch.float32)
 
         dist.all_to_all_single(
             output=recv_remote_subtensor,
@@ -655,12 +594,8 @@ def _load_subtensorV2(
             input_split_sizes=output_split_sizes,
             output_split_sizes=input_split_sizes,
         )
-        recv_remote_subtensor = recv_remote_subtensor.to(seeds.device).reshape(
-            (-1, input_dim)
-        )
-        ret = torch.cat([local_subtensor, recv_remote_subtensor])[
-            permutation
-        ]
+        recv_remote_subtensor = recv_remote_subtensor.to(seeds.device).reshape((-1, input_dim))
+        ret = torch.cat([local_subtensor, recv_remote_subtensor])[permutation]
         return ret
 
 
@@ -669,7 +604,7 @@ def _load_subtensorV3(
     seeds: torch.Tensor,
     multi_machine_comm_list,
 ) -> torch.Tensor:
-    if not args.multi_machines_flag:
+    if not args.cross_machine_feat_load:
         return torch.ops.npc.load_subtensor(seeds)
     else:
         # crossmachine GPU-nccl load subtensor
@@ -707,10 +642,7 @@ def _load_subtensorV3(
         send_out_queue[0].get()
         recv_out_queue[0].get()
         # gloo all-to-all remote req
-        output_tensor_list = [
-            torch.empty(recv_sizes_split[i].item(), dtype=torch.int64)
-            for i in range(num_peers)
-        ]
+        output_tensor_list = [torch.empty(recv_sizes_split[i].item(), dtype=torch.int64) for i in range(num_peers)]
         input_tensor_list = list(torch.split(remote_req, send_size.tolist()))
         for i in range(num_peers):
             send_in_queue[i].put(([remote_worker_id[i]], input_tensor_list, i))
@@ -721,14 +653,10 @@ def _load_subtensorV3(
             recv_out_queue[i].get()
 
         # local CPU index-select feature loading
-        remote_req_subtensor = torch.ops.npc.cpu_load_subtensor(
-            torch.cat(output_tensor_list)
-        )
+        remote_req_subtensor = torch.ops.npc.cpu_load_subtensor(torch.cat(output_tensor_list))
         # gloo all-to-all remote subtensor
         remote_req_sub_list = list(torch.split(remote_req_subtensor, recv_sizes_split))
-        remote_subtensor_list = [
-            torch.empty((send_sizes_list[i], args.input_dim)) for i in range(num_peers)
-        ]
+        remote_subtensor_list = [torch.empty((send_sizes_list[i], args.input_dim)) for i in range(num_peers)]
         for i in range(num_peers):
             send_in_queue[i].put(([remote_worker_id[i]], remote_req_sub_list, i))
             recv_in_queue[i].put(([remote_worker_id[i]], remote_subtensor_list, i))
@@ -738,9 +666,7 @@ def _load_subtensorV3(
             recv_out_queue[i].get()
         # cat local_subtensor and remote subtensor
         device = seeds.device
-        ret = torch.cat(
-            ([local_subtensor] + [ts.to(device) for ts in remote_subtensor_list])
-        )[permutation]
+        ret = torch.cat(([local_subtensor] + [ts.to(device) for ts in remote_subtensor_list]))[permutation]
         return ret
 
 
@@ -783,9 +709,7 @@ def load_subtensor(args, sample_result, multi_machines_comm_list):
         )
     elif args.system == "DP":
         # [0]input_nodes, [1]seeds, [2]blocks
-        return sample_result[2], _load_subtensorV2(
-            args, sample_result[0], multi_machines_comm_list
-        )
+        return sample_result[2], _load_subtensorV2(args, sample_result[0], multi_machines_comm_list)
     elif args.system == "MP":
         # [0]input_nodes, [1]seeds, [2]blocks, [3]send_size, [4]recv_size
         fsi = MPFeatureShuffleInfo(
@@ -832,16 +756,12 @@ class MixedNeighborSampler(object):
         if debug_info is not None:
             self.debug_graph, self.debug_min_vids, self.num_nodes = debug_info
             self.debug_flag = True
-            print(
-                f"[Note]debug:{self.debug_flag}\t graph:{self.debug_graph}\t min_vids:{self.debug_min_vids}\t #nodes:{self.num_nodes}"
-            )
+            print(f"[Note]debug:{self.debug_flag}\t graph:{self.debug_graph}\t min_vids:{self.debug_min_vids}\t #nodes:{self.num_nodes}")
 
     def debug_check(self, src, dst):
         cpu_src = src.detach().cpu()
         cpu_dst = dst.detach().cpu()
-        debug_check_flag = torch.all(
-            self.debug_graph.has_edges_between(cpu_src, cpu_dst)
-        )
+        debug_check_flag = torch.all(self.debug_graph.has_edges_between(cpu_src, cpu_dst))
         # print(f"[Note]Sampling check:{debug_check_flag}")
         assert debug_check_flag, "[Error]Sampling debug_check failed"
 
@@ -862,9 +782,7 @@ class MixedNeighborSampler(object):
         # Shape seeds = sum(send_offset)
         # Shape negibors = sum(send_offset) * self.las_fanouts
         event.record()
-        seeds, neighbors, perm, send_offset, recv_offset = np_sample_and_shuffle(
-            seeds, self.las_fanouts
-        )
+        seeds, neighbors, perm, send_offset, recv_offset = np_sample_and_shuffle(seeds, self.las_fanouts)
         replicated_seeds = torch.repeat_interleave(seeds, self.las_fanouts)
         if self.debug_flag:
             self.debug_check(neighbors, replicated_seeds)
@@ -900,9 +818,7 @@ class MixedPSNeighborSampler(object):
         if debug_info is not None:
             self.debug_graph, self.debug_min_vids, self.num_nodes = debug_info
             self.debug_flag = True
-            print(
-                f"[Note]debug:{self.debug_flag}\t graph:{self.debug_graph}\t min_vids:{self.debug_min_vids}\t #nodes:{self.num_nodes}"
-            )
+            print(f"[Note]debug:{self.debug_flag}\t graph:{self.debug_graph}\t min_vids:{self.debug_min_vids}\t #nodes:{self.num_nodes}")
 
     def sample(self, graph, seeds):
         output_nodes = seeds
@@ -918,12 +834,8 @@ class MixedPSNeighborSampler(object):
                 replicated_seeds = torch.repeat_interleave(seeds, fanout)
                 copy_seeds = replicated_seeds.detach().cpu()
                 copy_neighbors = neighbors.detach().cpu()
-                flag = torch.all(
-                    self.debug_graph.has_edges_between(copy_neighbors, copy_seeds)
-                )
-                assert (
-                    flag
-                ), f"[Note]Sys{self.system}\t layer_id:{layer_id}\t flag:{flag}"
+                flag = torch.all(self.debug_graph.has_edges_between(copy_neighbors, copy_seeds))
+                assert flag, f"[Note]Sys{self.system}\t layer_id:{layer_id}\t flag:{flag}"
 
             if layer_id == self.num_layers - 1:
                 if self.system == "DP":
@@ -944,24 +856,18 @@ class MixedPSNeighborSampler(object):
                     num_dst = seeds.numel()
                     map_src = sorted_allnodes[num_dst:]
 
-                    unique_frontier, arange_src = torch.unique(
-                        map_src, return_inverse=True
-                    )
+                    unique_frontier, arange_src = torch.unique(map_src, return_inverse=True)
                     # build block1 by dgl.create_block
                     num_dst = seeds.numel()
                     device = seeds.device
-                    arange_dst = torch.arange(num_dst, device=device).repeat_interleave(
-                        fanout
-                    )
+                    arange_dst = torch.arange(num_dst, device=device).repeat_interleave(fanout)
                     block1 = dgl.create_block((arange_src, arange_dst))
                     blocks.insert(0, block1)
                     # send_frontier = [dst, (pack virtual nodes and original)]
                     send_frontier = torch.cat(
                         (
                             seeds[perm_allnodes[:num_dst]],
-                            self.sp_val
-                            + (map_src % num_dst) * self.num_total_nodes
-                            + neighbors[perm_allnodes[num_dst:] - num_dst],
+                            self.sp_val + (map_src % num_dst) * self.num_total_nodes + neighbors[perm_allnodes[num_dst:] - num_dst],
                         )
                     )
 
@@ -986,9 +892,7 @@ class MixedPSNeighborSampler(object):
                     sampling_result = (send_sizes, recv_sizes)
 
                 elif self.system == "MP":
-                    seeds, neighbors, send_size, recv_size = mp_sample_shuffle(
-                        seeds, neighbors
-                    )
+                    seeds, neighbors, send_size, recv_size = mp_sample_shuffle(seeds, neighbors)
                     sampling_result = (send_size, recv_size)
 
             if layer_id != self.num_layers - 1 or self.system != "SP":
@@ -1030,9 +934,7 @@ class DGLNeighborSampler(dgl.dataloading.NeighborSampler):
             output_device,
         )
 
-    def sample(
-        self, g, seed_nodes, exclude_eids=None
-    ):  # pylint: disable=arguments-differ
+    def sample(self, g, seed_nodes, exclude_eids=None):  # pylint: disable=arguments-differ
         """Sample a list of blocks from the given seed nodes."""
         result = self.sample_blocks(g, seed_nodes, exclude_eids=exclude_eids)
         return result
@@ -1062,14 +964,10 @@ def sp_sample_and_shuffle(
     sorted_allnodes: torch.Tensor,
     unique_frontier: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    return torch.ops.npc.sp_sample_and_shuffle(
-        num_dst, send_frontier, sorted_allnodes, unique_frontier
-    )
+    return torch.ops.npc.sp_sample_and_shuffle(num_dst, send_frontier, sorted_allnodes, unique_frontier)
 
 
-def mp_sample_shuffle(
-    seeds: torch.Tensor, neighs: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def mp_sample_shuffle(seeds: torch.Tensor, neighs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     return torch.ops.npc.mp_sample_shuffle(seeds, neighs)
 
 
@@ -1083,9 +981,7 @@ class NPFeatureShuffleInfo(object):
 
 class NPFeatureShuffle(torch.autograd.Function):
     @staticmethod
-    def forward(
-        ctx, fsi: NPFeatureShuffleInfo, input_tensor: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(ctx, fsi: NPFeatureShuffleInfo, input_tensor: torch.Tensor) -> torch.Tensor:
         ctx.fsi = fsi
 
         shuffle_result = feat_shuffle(
@@ -1180,6 +1076,7 @@ class MPFeatureShuffle(torch.autograd.Function):
         )
         return shuffle_result
 
+    @staticmethod
     def backward(ctx, grad_output_tensor: torch.Tensor) -> torch.Tensor:
         fsi: MPFeatureShuffleInfo = ctx.fsi
         shuffle_grad = mp_feat_shuffle_bwd(
@@ -1199,9 +1096,7 @@ def feat_shuffle(
     feat_dim: int,
     fwd_flag: int,
 ):
-    return torch.ops.npc.feat_shuffle(
-        inputs, send_offset, recv_offset, permutation, feat_dim, fwd_flag
-    )
+    return torch.ops.npc.feat_shuffle(inputs, send_offset, recv_offset, permutation, feat_dim, fwd_flag)
 
 
 def sp_feat_shuffle(
@@ -1211,9 +1106,7 @@ def sp_feat_shuffle(
     total_recv_size: int,
     feat_dim: int,
 ):
-    return torch.ops.npc.sp_feat_shuffle(
-        input, send_sizes, recv_sizes, total_recv_size, feat_dim
-    )
+    return torch.ops.npc.sp_feat_shuffle(input, send_sizes, recv_sizes, total_recv_size, feat_dim)
 
 
 def mp_feat_shuffle_fwd(
