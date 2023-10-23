@@ -254,7 +254,7 @@ def pre_spawn():
     shared_tensor_list = [global_labels, global_train_mask, indptr, indices]
     # append val_idx for validation
     if args.debug:
-        shared_tensor_list.append(global_node_feats)
+        shared_tensor_list.append(global_node_feats.clone())
         shared_tensor_list.append(val_idx)
 
     for tensor in shared_tensor_list:
