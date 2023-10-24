@@ -11,6 +11,8 @@ import threading
 import queue
 import psutil
 
+from utils import *
+
 GB_TO_BYTES = 1024 * 1024 * 1024
 BYTES_PER_ELEMENT = 4
 
@@ -821,14 +823,12 @@ class MixedPSNeighborSampler(object):
             print(f"[Note]debug:{self.debug_flag}\t graph:{self.debug_graph}\t min_vids:{self.debug_min_vids}\t #nodes:{self.num_nodes}")
 
     def sample(self, graph, seeds):
+        torch.cuda.nvtx.range_push("sample")
         output_nodes = seeds
         blocks = []
 
         for layer_id, fanout in enumerate(reversed(self.fanouts)):
-            seeds, neighbors = local_sample_one_layer(
-                seeds,
-                fanout,
-            )
+            seeds, neighbors = local_sample_one_layer(seeds, fanout)
 
             if self.debug_flag:
                 replicated_seeds = torch.repeat_interleave(seeds, fanout)
@@ -896,17 +896,14 @@ class MixedPSNeighborSampler(object):
                     sampling_result = (send_size, recv_size)
 
             if layer_id != self.num_layers - 1 or self.system != "SP":
-                replicated_seeds = torch.repeat_interleave(seeds, fanout)
-                block_g = dgl.graph((neighbors, replicated_seeds))
-                block = dgl.to_block(g=block_g, dst_nodes=seeds)
+                torch.cuda.nvtx.range_push("construct block")
+                block = creat_dgl_block(seeds, neighbors)
                 seeds = block.srcdata[dgl.NID]
                 blocks.insert(0, block)
+                torch.cuda.nvtx.range_pop()
 
-        return (
-            seeds,
-            output_nodes,
-            blocks,
-        ) + sampling_result
+        torch.cuda.nvtx.range_pop()
+        return (seeds, output_nodes, blocks) + sampling_result
 
 
 class DGLNeighborSampler(dgl.dataloading.NeighborSampler):
