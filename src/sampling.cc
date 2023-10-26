@@ -124,41 +124,50 @@ ShuffleSeeds(torch::Tensor seeds, IdType base1) {
   return {recv_frontier, permutation, recv_offset, dev_offset};
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-MPSampleShuffle(torch::Tensor seeds, torch::Tensor neighs) {
+std::vector<torch::Tensor> MPSampleShuffle(
+    torch::Tensor seeds, torch::Tensor unique_frontier, torch::Tensor coo_row) {
   auto* state = NPCState::Global();
   auto world_size = state->world_size;
   auto rank = state->rank;
   auto seeds_size = seeds.numel();
-  auto neigh_size = neighs.numel();
-  auto cuda_tensor_option = seeds.options();
+  auto frontier_size = unique_frontier.numel();
+  auto coo_size = coo_row.numel();
+  auto cuda_tensor_option = unique_frontier.options();
   // all gather send size
   auto arange = torch::arange(1, world_size + 1) * 2;
 
-  auto send_size = torch::tensor({seeds_size, neigh_size}, cuda_tensor_option);
+  auto send_size =
+      torch::tensor({seeds_size, frontier_size, coo_size}, cuda_tensor_option);
   auto recv_size = AllGather(send_size).to(torch::kCPU);
 
   auto recv_seeds_size =
-      recv_size.index({torch::indexing::Slice(0, torch::indexing::None, 2)})
+      recv_size.index({torch::indexing::Slice(0, torch::indexing::None, 3)})
           .contiguous();
 
-  auto recv_neighs_size =
-      recv_size.index({torch::indexing::Slice(1, torch::indexing::None, 2)})
+  auto recv_frontier_size =
+      recv_size.index({torch::indexing::Slice(1, torch::indexing::None, 3)})
+          .contiguous();
+
+  auto recv_coo_size =
+      recv_size.index({torch::indexing::Slice(2, torch::indexing::None, 3)})
           .contiguous();
 
   // all boardcast seeds and neighbors
-  auto recv_seeds_total_size = torch::sum(recv_seeds_size).item<IdType>();
-  auto recv_neighs_total_size = torch::sum(recv_neighs_size).item<IdType>();
+  auto recv_frontier_total_size = torch::sum(recv_frontier_size).item<IdType>();
+  auto recv_coo_total_size = torch::sum(recv_coo_size).item<IdType>();
 
-  auto recv_seeds = torch::empty(recv_seeds_total_size, cuda_tensor_option);
-  auto recv_neighs = torch::empty(recv_neighs_total_size, cuda_tensor_option);
-  auto tensor_seeds_size = torch::tensor({seeds_size});
-  auto tensor_neighs_size = torch::tensor({neigh_size});
+  auto recv_frontier =
+      torch::empty(recv_frontier_total_size, cuda_tensor_option);
+  auto recv_coo_row = torch::empty(recv_coo_total_size, cuda_tensor_option);
 
-  AllBroadcastV2(seeds, recv_seeds, tensor_seeds_size, recv_seeds_size);
-  AllBroadcastV2(neighs, recv_neighs, tensor_neighs_size, recv_neighs_size);
+  AllBroadcastV2(
+      unique_frontier, recv_frontier, torch::tensor({frontier_size}),
+      recv_frontier_size);
+  AllBroadcastV2(
+      coo_row, recv_coo_row, torch::tensor({coo_size}), recv_coo_size);
 
-  return {recv_seeds, recv_neighs, tensor_seeds_size, recv_seeds_size};
+  return {recv_frontier,   recv_coo_row,       torch::tensor({seeds_size}),
+          recv_seeds_size, recv_frontier_size, recv_coo_size};
 }
 
 }  // namespace npc

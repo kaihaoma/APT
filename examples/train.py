@@ -24,9 +24,7 @@ LIMIT_BATCHES = 200
 
 
 def run(rank, local_rank, world_size, args, shared_tensor_list):
-    print(
-        f"[Note] Starting run on Rank#{rank}, local:{local_rank} of W{world_size}\t debug:{args.debug}"
-    )
+    print(f"[Note] Starting run on Rank#{rank}, local:{local_rank} of W{world_size}\t debug:{args.debug}")
 
     device = torch.device(f"cuda:{local_rank}")
     args.rank = rank
@@ -53,12 +51,8 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
     for ts in shared_tensor_list:
         utils.pin_tensor(ts)
 
-    partition_data = npc.load_partition(
-        args=args, rank=rank, device=device, shared_tensor_list=shared_tensor_list
-    )
-    print(
-        f"[Note]Done load parititon data, {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}"
-    )
+    partition_data = npc.load_partition(args=args, rank=rank, device=device, shared_tensor_list=shared_tensor_list)
+    print(f"[Note]Done load parititon data, {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
 
     train_nid = partition_data.train_nid
     min_vids = partition_data.min_vids
@@ -88,9 +82,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         rank_val_idx = val_idx[rank * num_val_per_rank : (rank + 1) * num_val_per_rank]
 
         if rank == 0:
-            acc_file = open(
-                f"./logs/accuracy/{args.system}_{args.dataset}_{world_size}.txt", "w"
-            )
+            acc_file = open(f"./logs/accuracy/{args.system}_{args.dataset}_{world_size}.txt", "w")
 
     if args.system == "NP":
         sampler = npc.MixedNeighborSampler(
@@ -121,9 +113,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         shuffle=True,
         drop_last=True,
     )
-    print(
-        f"[Note]Done define dataloader , {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}"
-    )
+    print(f"[Note]Done define dataloader , {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
     if args.debug:
         val_dataloader = dgl.dataloading.DataLoader(
             graph=fake_graph,
@@ -168,9 +158,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
     else:
         raise ValueError(f"Invalid system:{args.system}")
 
-    print(
-        f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}"
-    )
+    print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
 
     if args.world_size > 1:
         if args.system == "MP":
@@ -185,20 +173,14 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 device_ids=[device],
                 output_device=device,
             )
-    print(
-        f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}"
-    )
+    print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
     # [NOTE] old example
     # loss_fcn = torch.nn.CrossEntropyLoss()
     # loss_fcn = F.cross_entropy()
     # optimizer = torch.optim.Adam(training_model.parameters(), lr=0.003)
-    optimizer = torch.optim.Adam(
-        training_model.parameters(), lr=0.001, weight_decay=5e-4
-    )
+    optimizer = torch.optim.Adam(training_model.parameters(), lr=0.001, weight_decay=5e-4)
     dist.barrier()
-    print(
-        f"[Note]Rank#{rank} Ready to train\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}"
-    )
+    print(f"[Note]Rank#{rank} Ready to train\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
 
     training_mode = args.training_mode
     if training_mode == "sampling":
@@ -253,14 +235,9 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 # record.extend([num_cached, num_sample_nodes, num_cached / num_sample_nodes])
                 # record.append(t_list[0].elapsed_time(t_list[1]))
                 if epoch >= warmup_epochs:
-                    result_tensor = torch.as_tensor(
-                        record, dtype=torch.float32, device=device
-                    )
+                    result_tensor = torch.as_tensor(record, dtype=torch.float32, device=device)
 
-                    tensor_list = [
-                        torch.empty(num_data_types, dtype=torch.float32, device=device)
-                        for _ in range(world_size)
-                    ]
+                    tensor_list = [torch.empty(num_data_types, dtype=torch.float32, device=device) for _ in range(world_size)]
                     dist.all_gather(tensor_list, result_tensor)
 
                     all_record = torch.vstack(tensor_list).transpose(0, 1).tolist()
@@ -289,11 +266,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     writer = csv.writer(f, lineterminator="\n")
                     # Tag, System, Dataset, Model, Machines, local batch_size, fanout, hidden size, cache ratio, num_epochs, num batches per epoch, Sampling time, Loading time, Training time,
                     cache_memory = f"{round(args.cache_memory / (1024*1024*1024), 1)}GB"
-                    cache_value = (
-                        args.greedy_feat_ratio
-                        if args.cache_mode == "greedy"
-                        else args.tag.split("_")[-1]
-                    )
+                    cache_value = args.greedy_feat_ratio if args.cache_mode == "greedy" else args.tag.split("_")[-1]
                     log_info = [
                         args.tag,
                         # args.system,
@@ -335,6 +308,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         featloading_log_list = []
         record_list = [[] for _ in range(6)]
         for epoch in range(args.num_epochs):
+            epoch_tic_start = utils.get_time()
             # t2 = utils.get_time()
             bt2, t2 = utils.get_time_straggler()
             total_loss = 0
@@ -344,10 +318,9 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 bt0, t0 = utils.get_time_straggler()
                 # nvtx.range_pop()
                 # nvtx.range_push("Loading")
+
                 batch_labels = labels[sample_result[1]]
-                loading_result = npc.load_subtensor(
-                    args, sample_result, multi_machine_comm_list
-                )
+                loading_result = npc.load_subtensor(args, sample_result, multi_machine_comm_list)
                 # check feature loading
                 if args.debug:
                     feat_dim_slice = (
@@ -360,12 +333,8 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                         else slice(None)
                     )
 
-                    debug_loading_result = debug_global_features[
-                        sample_result[0].to("cpu"), feat_dim_slice
-                    ]
-                    debug_loading_flag = torch.all(
-                        torch.eq(loading_result[1].detach().cpu(), debug_loading_result)
-                    )
+                    debug_loading_result = debug_global_features[sample_result[0].to("cpu"), feat_dim_slice]
+                    debug_loading_flag = torch.all(torch.eq(loading_result[1].detach().cpu(), debug_loading_result))
                     print(f"[Note]Feature loading check: {debug_loading_flag}")
                     assert debug_loading_flag
 
@@ -452,6 +421,9 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
                 t2 = utils.get_time()
 
+            epoch_tic_end = utils.get_time()
+            print(f"Rank: {rank} | Epoch: {epoch} | Epoch time: {epoch_tic_end - epoch_tic_start:.3f} s")
+
             # evaluate
             if args.debug:
                 acc = (
@@ -480,9 +452,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
             maxx = round(max(record_list[i]) * 1000, 2)
             minn = round(min(record_list[i]) * 1000, 2)
             avgg = round(sum(record_list[i]) / len(record_list[i]) * 1000, 2)
-            print(
-                f"[Note]Rank#{rank} epoch#{epoch} step#{i} max:{maxx} min:{minn} avg:{avgg}"
-            )
+            print(f"[Note]Rank#{rank} epoch#{epoch} step#{i} max:{maxx} min:{minn} avg:{avgg}")
         if args.debug and rank == 0:
             acc_file.close()
         if not args.debug and rank == 0 and args.num_epochs > 1:
@@ -497,31 +467,16 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 writer.writerow(featloading_log_mean)
             """
 
-            avg_time_epoch_sampling = round(
-                total_time[0] * 1000.0 / num_record_epochs, 4
-            )
-            avg_time_epoch_loading = round(
-                total_time[1] * 1000.0 / num_record_epochs, 4
-            )
-            avg_time_epoch_training = round(
-                total_time[2] * 1000.0 / num_record_epochs, 4
-            )
+            avg_time_epoch_sampling = round(total_time[0] * 1000.0 / num_record_epochs, 4)
+            avg_time_epoch_loading = round(total_time[1] * 1000.0 / num_record_epochs, 4)
+            avg_time_epoch_training = round(total_time[2] * 1000.0 / num_record_epochs, 4)
             print(f"[Note]Write to logs file {args.logs_dir}\t tag:{args.tag}")
             with open(args.logs_dir, "a") as f:
                 writer = csv.writer(f, lineterminator="\n")
                 # Tag, System, Dataset, Model, Machines, local batch_size, fanout, cache_mode, cache_memory, cache_value, feat cache node, feat cache element, graph cache node, graph cache element, num_epochs, num batches per epoch, Sampling time, Loading time, Training time,
                 cache_memory = f"{round(args.cache_memory / (1024*1024*1024), 1)}GB"
-                cache_value = (
-                    args.greedy_feat_ratio
-                    if args.cache_mode == "greedy"
-                    else args.tag.split("_")[-1]
-                )
-                avg_epoch_time = round(
-                    avg_time_epoch_sampling
-                    + avg_time_epoch_loading
-                    + avg_time_epoch_training,
-                    2,
-                )
+                cache_value = args.greedy_feat_ratio if args.cache_mode == "greedy" else args.tag.split("_")[-1]
+                avg_epoch_time = round(avg_time_epoch_sampling + avg_time_epoch_loading + avg_time_epoch_training, 2)
                 write_tag = f"{args.tag}_{args.system}"
                 log_info = [
                     write_tag,

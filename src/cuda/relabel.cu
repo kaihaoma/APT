@@ -1,11 +1,7 @@
-#include <c10/cuda/CUDAStream.h>
-#include <curand_kernel.h>
-#include <thrust/binary_search.h>
-#include <thrust/device_vector.h>
-
-#include "../state.h"
-#include "../utils.h"
+#include "./atomic.h"
+#include "./cuda_common.h"
 #include "./npc_kernel.h"
+#include "./utils.h"
 
 namespace npc {
 template <typename IdType>

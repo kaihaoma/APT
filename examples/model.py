@@ -86,9 +86,7 @@ class DGLSAGE(nn.Module):
         )
 
     def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout):
-        print(
-            f"[Note]DGL SAGE: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}"
-        )
+        print(f"[Note]DGL SAGE: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
         self.in_feats = in_feats
@@ -228,8 +226,15 @@ class MPSAGE(nn.Module):
 
         if self.n_layers > 1:
             # first mp layer
-            self.mp_layers = dglnn.SAGEConv(
-                self.in_feats_list[self.rank], self.n_hidden, "mean"
+            # self.mp_layers = dglnn.SAGEConv(
+            #     self.in_feats_list[self.rank],
+            #     self.n_hidden,
+            #     "mean",
+            # ).to(self.device)
+            self.mp_layers = npc.MPSAGEConv(
+                self.in_feats_list[self.rank],
+                self.n_hidden,
+                "mean",
             ).to(self.device)
             # ddp
             ddp_config = SimpleConfig(
@@ -266,11 +271,6 @@ class MPSAGE(nn.Module):
         # custom shuffle
         h = npc.MPFeatureShuffle.apply(fsi, h)
 
-        h = self.ddp_modules(
-            (
-                blocks[1:],
-                h,
-            )
-        )
+        h = self.ddp_modules((blocks[1:], h))
 
         return h

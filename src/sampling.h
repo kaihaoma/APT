@@ -57,11 +57,12 @@ std::tuple<
 SPSampleAndShuffle(
     IdType num_seeds, torch::Tensor send_frontier,
     torch::Tensor sorted_allnodes, torch::Tensor unique_frontier);
+
 // MP sample shuffle
 // input: seeds, neighs
 // output: gather_seeds, gather_neighs, send_size, recv_size
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-MPSampleShuffle(torch::Tensor seeds, torch::Tensor neighs);
+std::vector<torch::Tensor> MPSampleShuffle(
+    torch::Tensor seeds, torch::Tensor unique_frontier, torch::Tensor coo_row);
 
 }  // namespace npc
 
