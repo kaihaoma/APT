@@ -7,7 +7,9 @@
 #include "./feat_shuffle.h"
 #include "./load_subtensor.h"
 #include "./ops/collective.h"
+#include "./relabel.h"
 #include "./sampling.h"
+#include "./spmm.h"
 #include "./utils.h"
 
 namespace npc {
@@ -33,7 +35,9 @@ TORCH_LIBRARY(npc, m) {
       .def("sp_feat_shuffle", &SPFeatShuffle)
       .def("mp_feat_shuffle_fwd", &MPFeatShuffleFwd)
       .def("mp_feat_shuffle_bwd", &MPFeatShuffleBwd)
-      .def("shuffle_seeds", &ShuffleSeeds);
+      .def("shuffle_seeds", &ShuffleSeeds)
+      .def("relabel_csc", &RelabelCSC)
+      .def("spmm_copy_u_sum", &CopyUSum);
 }
 
 }  // namespace npc

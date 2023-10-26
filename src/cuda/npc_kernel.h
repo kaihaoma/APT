@@ -41,6 +41,14 @@ torch::Tensor GetVirSendOffset(
     int world_size, int base, torch::Tensor sorted_nodes,
     torch::Tensor unique_nodes);
 
+std::pair<torch::Tensor, torch::Tensor> TensorRelabelCSC(
+    torch::Tensor seeds, torch::Tensor neighbors);
+
+void CopyUSumCUDA(
+    torch::Tensor coo_row, torch::Tensor coo_col, torch::Tensor input,
+    torch::Tensor output, torch::Tensor coo_offset, torch::Tensor input_offset,
+    torch::Tensor output_offset);
+
 }  // namespace npc
 
 #endif
