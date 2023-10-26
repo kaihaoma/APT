@@ -34,7 +34,7 @@ class MPSAGEConv(nn.Module):
         activation=None,
     ):
         super(MPSAGEConv, self).__init__()
-        valid_aggre_types = {"mean", "gcn", "pool", "lstm"}
+        valid_aggre_types = {"mean"}
         if aggregator_type not in valid_aggre_types:
             raise KeyError("Invalid aggregator_type. Must be one of {}. " "But got {!r} instead.".format(valid_aggre_types, aggregator_type))
 
@@ -45,20 +45,8 @@ class MPSAGEConv(nn.Module):
         self.feat_drop = nn.Dropout(feat_drop)
         self.activation = activation
 
-        # aggregator type: mean/pool/lstm/gcn
-        if aggregator_type == "pool":
-            self.fc_pool = nn.Linear(self._in_src_feats, self._in_src_feats)
-        if aggregator_type == "lstm":
-            self.lstm = nn.LSTM(self._in_src_feats, self._in_src_feats, batch_first=True)
-
         self.fc_neigh = nn.Linear(self._in_src_feats, out_feats, bias=False)
-
-        if aggregator_type != "gcn":
-            self.fc_self = nn.Linear(self._in_dst_feats, out_feats, bias=bias)
-        elif bias:
-            self.bias = nn.parameter.Parameter(torch.zeros(self._out_feats))
-        else:
-            self.register_buffer("bias", None)
+        self.fc_self = nn.Linear(self._in_dst_feats, out_feats, bias=bias)
 
         self.reset_parameters()
 

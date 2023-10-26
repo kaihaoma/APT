@@ -25,9 +25,9 @@ __global__ void CopyUSumKernel(
   while (ty < E) {
     const Idx src = row[ty];
     const Idx dst = col[ty];
+    int rank = cub::UpperBound(coo_off, coo_off_len, ty) - 1;
     int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
     const int64_t stride_x = blockDim.x * gridDim.x;
-    int rank = cub::UpperBound(coo_off, coo_off_len, tx) - 1;
     const DType* inoff = infeat + (in_off[rank] + src) * feat_dim;
     DType* outoff = outfeat + (out_off[rank] + dst) * feat_dim;
     while (tx < feat_dim) {

@@ -10,7 +10,7 @@
 
 namespace npc {
 
-std::tuple<torch::Tensor, torch::Tensor> LocalSamplingNeibhorsOneLayer(
+std::vector<torch::Tensor> LocalSamplingNeibhorsOneLayer(
     torch::Tensor seeds, IdType fanout, IdType to_virtual) {
   auto local_neighbors = LocalSampleNeighbors(seeds, fanout, to_virtual);
   return {seeds, local_neighbors};
@@ -24,9 +24,8 @@ torch::Tensor SrcDsttoVir(IdType fanout, torch::Tensor dst, torch::Tensor src) {
   return map_allnodes;
 }
 
-std::tuple<
-    torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-NPSampleAndShuffle(torch::Tensor seeds, IdType fanout) {
+std::vector<torch::Tensor> NPSampleAndShuffle(
+    torch::Tensor seeds, IdType fanout) {
   torch::Tensor shuffled_frontier, permutation, recv_offset, dev_offset;
   std::tie(shuffled_frontier, permutation, recv_offset, dev_offset) =
       ShuffleSeeds(seeds);
@@ -38,9 +37,7 @@ NPSampleAndShuffle(torch::Tensor seeds, IdType fanout) {
       shuffled_frontier, local_neighbors, permutation, recv_offset, dev_offset};
 }
 
-std::tuple<
-    torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-SPSampleAndShuffle(
+std::vector<torch::Tensor> SPSampleAndShuffle(
     IdType num_seeds, torch::Tensor send_frontier,
     torch::Tensor sorted_allnodes, torch::Tensor unique_frontier) {
   auto* state = NPCState::Global();
