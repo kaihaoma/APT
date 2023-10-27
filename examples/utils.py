@@ -29,12 +29,12 @@ GB_TO_BYTES = 1024 * 1024 * 1024
 MB_TO_BYTES = 1024 * 1024
 
 
-def evaluate(args, model, labels, num_classes, dataloader, multi_machine_comm_list):
+def evaluate(args, model, labels, num_classes, dataloader):
     model.eval()
     ys = []
     y_hats = []
     for it, sampling_result in enumerate(dataloader):
-        loading_result = npc.load_subtensor(args, sampling_result, multi_machine_comm_list)
+        loading_result = npc.load_subtensor(args, sampling_result)
         with torch.no_grad():
             # x = gather_pinned_tensor_rows(feats, input_nodes)
             # y = gather_pinned_tensor_rows(labels, output_nodes)

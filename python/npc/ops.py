@@ -45,82 +45,6 @@ def allgather(a: torch.Tensor, comm_type: int = 0) -> torch.Tensor:
     return torch.ops.npc.allgather(a, comm_type)
 
 
-# -- utils --
-# multi-thread cross-machine gloo all-to-all
-class PCQueue(object):
-    def __init__(self, capacity):
-        self.capacity = threading.Semaphore(capacity)
-        self.product = threading.Semaphore(0)
-        self.buffer = queue.Queue()
-
-    def get(self):
-        self.product.acquire()
-        item = self.buffer.get()
-        self.buffer.task_done()
-        self.capacity.release()
-        return item
-
-    def put(self, item):
-        self.capacity.acquire()
-        self.buffer.put(item)
-        self.product.release()
-
-
-class SendThread(threading.Thread):
-    # sem_ = threading.Semaphore(0)
-    def __init__(self, in_queue, out_queue):
-        super().__init__()
-        self.in_queue = in_queue
-        self.out_queue = out_queue
-
-    def run(self):
-        while True:
-            to_send_rank, input_list, offset = self.in_queue.get()
-            if to_send_rank is None:
-                print(f"[Note]None to_send_rank, exit")
-                break
-            for i, dst in enumerate(to_send_rank):
-                dist.send(tensor=input_list[i + offset], dst=dst)
-            self.out_queue.put(1)
-
-
-class RecvThread(threading.Thread):
-    # sem_ = threading.Semaphore(0)
-    def __init__(self, in_queue, out_queue):
-        super().__init__()
-        self.in_queue = in_queue
-        self.out_queue = out_queue
-
-    def run(self):
-        while True:
-            to_recv_rank, output_list, offset = self.in_queue.get()
-            if to_recv_rank is None:
-                print(f"[Note]None to_recv_rank, exit")
-                break
-            for i, src in enumerate(to_recv_rank):
-                dist.recv(tensor=output_list[i + offset], src=src)
-            self.out_queue.put(1)
-
-
-def terminate_multi_machine_comm_list(multi_machines_comm_list):
-    if multi_machines_comm_list is None:
-        return
-    send_thread_in_queue_list = multi_machines_comm_list[2]
-    recv_thread_in_queue_list = multi_machines_comm_list[4]
-    # put terminte signal (None, None, None)
-    for send_in_queue in send_thread_in_queue_list:
-        send_in_queue.put((None, None, None))
-    for recv_in_queue in recv_thread_in_queue_list:
-        recv_in_queue.put((None, None, None))
-
-    send_thread_list = multi_machines_comm_list[0]
-    recv_thread_list = multi_machines_comm_list[1]
-    for send_thread in send_thread_list:
-        send_thread.join()
-    for recv_thread in recv_thread_list:
-        recv_thread.join()
-
-
 def cache_feats_shared(
     num_total_nodes: int,
     localnode_feats: torch.Tensor,
@@ -168,7 +92,6 @@ class PartData(object):
         num_cached_feat_elements,
         num_cached_graph_nodes,
         num_cached_graph_elements,
-        multi_machine_comm_list,
     ):
         super().__init__()
         self.min_vids = min_vids
@@ -179,7 +102,6 @@ class PartData(object):
         self.num_cached_feat_elements = num_cached_feat_elements
         self.num_cached_graph_nodes = num_cached_graph_nodes
         self.num_cached_graph_elements = num_cached_graph_elements
-        self.multi_machine_comm_list = multi_machine_comm_list
 
 
 def cache_adj_and_feats(
@@ -239,26 +161,6 @@ def cache_adj_and_feats(
         print(
             f"[Note]greedy: #feats:{num_cached_feat_nodes}\t  mem:{sorted_feat_mem[num_cached_feat_nodes]} #graphs:{num_cached_graph_nodes}\t mem:{sorted_graph_mem[num_cached_graph_nodes]}"
         )
-
-    elif args.cache_mode == "dp":
-        raise ValueError
-        # temp cache no graph nodes
-        print(f"[Note]Caching mode:{args.cache_mode} No cache graph nodes")
-        num_cached_graph_nodes = 0
-        cache_graph_node_idx = torch.tensor([], dtype=torch.long)
-
-        print(f"[Note]Caching mode:{args.cache_mode} Cache node_feats")
-
-        # Split Para: caching canditate nodes: local nodes
-        system_to_id = {"DP": 0, "NP": 1, "SP": 2, "MP": 3}
-        node_feats_freqs = torch.load(args.dp_freqs_path)[system_to_id[args.system]][rank][1]
-        sorted_node_feats_freq, sorted_idx = torch.sort(node_feats_freqs, descending=True)
-        base = 1
-        if args.system == "MP":
-            base = args.world_size
-        num_cached_feat_nodes = int(args.cache_memory * base / (args.input_dim * BYTES_PER_ELEMENT))
-
-        cache_feat_node_idx = sorted_idx[:num_cached_feat_nodes]
     elif args.cache_mode == "dryrun":
         # temp cache no graph nodes
         print(f"[Note]Caching mode:{args.cache_mode} No cache graph nodes")
@@ -456,38 +358,8 @@ def load_partition(
     # register min_vids
     register_min_vids(min_vids)
 
-    # register multi-machines scheme & send & recv thread
-    multi_machines_comm_list = None
     if args.cross_machine_feat_load:
         register_multi_machines_scheme(args)
-        """
-        # multi-machines send & recv thread
-        num_peers = args.num_remote_worker
-        send_thread_list = []
-        recv_thread_list = []
-        send_thread_in_queue_list = [PCQueue(1) for _ in range(num_peers)]
-        send_thread_out_queue_list = [PCQueue(1) for _ in range(num_peers)]
-        recv_thread_in_queue_list = [PCQueue(1) for _ in range(num_peers)]
-        recv_thread_out_queue_list = [PCQueue(1) for _ in range(num_peers)]
-        for i in range(num_peers):
-            send_thread_list.append(
-                SendThread(send_thread_in_queue_list[i], send_thread_out_queue_list[i])
-            )
-            recv_thread_list.append(
-                RecvThread(recv_thread_in_queue_list[i], recv_thread_out_queue_list[i])
-            )
-            send_thread_list[i].start()
-            recv_thread_list[i].start()
-
-        multi_machines_comm_list = [
-            send_thread_list,
-            recv_thread_list,
-            send_thread_in_queue_list,
-            send_thread_out_queue_list,
-            recv_thread_in_queue_list,
-            recv_thread_out_queue_list,
-        ]
-        """
 
     return PartData(
         min_vids,
@@ -498,7 +370,6 @@ def load_partition(
         num_cached_feat_elements,
         num_cached_graph_nodes,
         num_cached_graph_elements,
-        multi_machines_comm_list,
     )
 
 
@@ -509,169 +380,22 @@ def register_min_vids(min_vids: torch.Tensor) -> None:
 def register_multi_machines_scheme(args: argparse.Namespace) -> Optional[torch.Tensor]:
     gpu_remote_worker_map = torch.tensor(args.remote_worker_map).to(f"cuda:{args.local_rank}")
     remote_worker_id = torch.tensor(args.remote_worker_id)
-    print(f"[INFO] gpu_remote_worker_map:{gpu_remote_worker_map}\t remote_worker_id:{remote_worker_id}")
     torch.ops.npc.register_multi_machines_scheme(gpu_remote_worker_map, remote_worker_id)
-
-
-# custom gloo all-to-all by (gloo.send, gloo.recv)
-def thread_send(to_send_rank: List[int], input_list: List[torch.Tensor], offset=0):
-    for i, dst in enumerate(to_send_rank):
-        dist.send(tensor=input_list[i + offset], dst=dst)
-
-
-def thread_recv(to_recv_rank: List[int], output_list: List[torch.Tensor], offset=0):
-    for i, src in enumerate(to_recv_rank):
-        dist.recv(tensor=output_list[i + offset], src=src)
 
 
 def _load_subtensorV2(
     args: argparse.Namespace,
     seeds: torch.Tensor,
-    multi_machine_comm_list,
 ) -> torch.Tensor:
     if not args.cross_machine_feat_load:
         return torch.ops.npc.load_subtensor(seeds)
     else:
         # multi-machine load subtensor
-        rank = args.rank
-        world_size = args.world_size
-        num_peers = args.num_remote_worker
-        remote_worker_id = args.remote_worker_id[1:]
-        input_dim = args.input_dim
-        # cluster seeds into local_reqs and remote_reqs
-        send_size, sorted_req, permutation = torch.ops.npc.cluster_reqs(seeds)
-        local_size = send_size[0].item()
-        local_req = sorted_req[:local_size]
-        remote_req = sorted_req[local_size:].to("cpu")
-        send_size = send_size[1 : num_peers + 1].to("cpu")
-
-        # [c++] load_subtensor on local_req on local machines
-        local_subtensor = torch.ops.npc.load_subtensor(local_req)
-
-        # all_to_all_single send_size
-        input_split_sizes = [0 for _ in range(world_size)]
-        output_split_sizes = [0 for _ in range(world_size)]
-        for remote_worker in remote_worker_id:
-            input_split_sizes[remote_worker] = 1
-            output_split_sizes[remote_worker] = 1
-
-        # print(f"[Note]input_split_sizes: {input_split_sizes}\t output_split_sizes: {output_split_sizes}")
-        recv_size = torch.empty(num_peers, dtype=torch.long)
-        dist.all_to_all_single(
-            output=recv_size,
-            input=send_size,
-            input_split_sizes=input_split_sizes,
-            output_split_sizes=output_split_sizes,
-        )
-        # print(f"[Note]Rk#{rank} recv_size: {recv_size}\t send_size: {send_size}")
-
-        # all-to-all req
-        send_req_size = torch.sum(send_size).item()
-        recv_req_size = torch.sum(recv_size).item()
-        recv_req = torch.empty(recv_req_size, dtype=torch.int64)
-        for i, remote_worker in enumerate(remote_worker_id):
-            input_split_sizes[remote_worker] = send_size[i].item()
-            output_split_sizes[remote_worker] = recv_size[i].item()
-
-        dist.all_to_all_single(
-            output=recv_req,
-            input=remote_req,
-            input_split_sizes=input_split_sizes,
-            output_split_sizes=output_split_sizes,
-        )
-
-        # local CPU index-select feature loading
-        remote_req_subtensor = torch.ops.npc.cpu_load_subtensor(recv_req).flatten()
-
-        # all-to-all remote req subtensor
-        input_split_sizes = [v * input_dim for v in input_split_sizes]
-        output_split_sizes = [v * input_dim for v in output_split_sizes]
-
-        recv_remote_subtensor = torch.empty(send_req_size * input_dim, dtype=torch.float32)
-
-        dist.all_to_all_single(
-            output=recv_remote_subtensor,
-            input=remote_req_subtensor,
-            input_split_sizes=output_split_sizes,
-            output_split_sizes=input_split_sizes,
-        )
-        recv_remote_subtensor = recv_remote_subtensor.to(seeds.device).reshape((-1, input_dim))
-        ret = torch.cat([local_subtensor, recv_remote_subtensor])[permutation]
-        return ret
-
-
-def _load_subtensorV3(
-    args: argparse.Namespace,
-    seeds: torch.Tensor,
-    multi_machine_comm_list,
-) -> torch.Tensor:
-    if not args.cross_machine_feat_load:
-        return torch.ops.npc.load_subtensor(seeds)
-    else:
-        # crossmachine GPU-nccl load subtensor
-        """
         ret = torch.ops.npc.crossmachine_load_subtensor(seeds)
         return ret
-        """
-        # crossmachine CPU-gloo load subtensor
-
-        send_in_queue = multi_machine_comm_list[2]
-        send_out_queue = multi_machine_comm_list[3]
-        recv_in_queue = multi_machine_comm_list[4]
-        recv_out_queue = multi_machine_comm_list[5]
-        # multi-machine load subtensor
-        num_peers = args.num_remote_worker
-        # cluster seeds into local_reqs and remote_reqs
-        send_size, sorted_req, permutation = torch.ops.npc.cluster_reqs(seeds)
-        local_size = send_size[0].item()
-
-        local_req = sorted_req[:local_size]
-        remote_req = sorted_req[local_size:].to("cpu")
-        send_size = send_size[1 : num_peers + 1].to("cpu")
-
-        # [c++] load_subtensor on local_req on local machines
-        local_subtensor = torch.ops.npc.load_subtensor(local_req)
-        # gloo all-to-all sizes
-        remote_worker_id = args.remote_worker_id[1:]
-        recv_sizes_split = [torch.empty(1, dtype=torch.long) for _ in range(num_peers)]
-        send_sizes_split = list(torch.split(send_size, 1))
-        send_sizes_list = send_size.tolist()
-
-        send_in_queue[0].put((remote_worker_id, send_sizes_split, 0))
-        recv_in_queue[0].put((remote_worker_id, recv_sizes_split, 0))
-
-        send_out_queue[0].get()
-        recv_out_queue[0].get()
-        # gloo all-to-all remote req
-        output_tensor_list = [torch.empty(recv_sizes_split[i].item(), dtype=torch.int64) for i in range(num_peers)]
-        input_tensor_list = list(torch.split(remote_req, send_size.tolist()))
-        for i in range(num_peers):
-            send_in_queue[i].put(([remote_worker_id[i]], input_tensor_list, i))
-            recv_in_queue[i].put(([remote_worker_id[i]], output_tensor_list, i))
-
-        for i in range(num_peers):
-            send_out_queue[i].get()
-            recv_out_queue[i].get()
-
-        # local CPU index-select feature loading
-        remote_req_subtensor = torch.ops.npc.cpu_load_subtensor(torch.cat(output_tensor_list))
-        # gloo all-to-all remote subtensor
-        remote_req_sub_list = list(torch.split(remote_req_subtensor, recv_sizes_split))
-        remote_subtensor_list = [torch.empty((send_sizes_list[i], args.input_dim)) for i in range(num_peers)]
-        for i in range(num_peers):
-            send_in_queue[i].put(([remote_worker_id[i]], remote_req_sub_list, i))
-            recv_in_queue[i].put(([remote_worker_id[i]], remote_subtensor_list, i))
-
-        for i in range(num_peers):
-            send_out_queue[i].get()
-            recv_out_queue[i].get()
-        # cat local_subtensor and remote subtensor
-        device = seeds.device
-        ret = torch.cat(([local_subtensor] + [ts.to(device) for ts in remote_subtensor_list]))[permutation]
-        return ret
 
 
-def load_subtensor(args, sample_result, multi_machines_comm_list):
+def load_subtensor(args, sample_result):
     if args.system == "NP":
         # [0]input_nodes, [1]seeds, [2]blocks, [3]perm, [4]send_offset, [5]recv_offset
         fsi = NPFeatureShuffleInfo(
@@ -682,7 +406,7 @@ def load_subtensor(args, sample_result, multi_machines_comm_list):
         )
         return (
             sample_result[2],
-            _load_subtensorV2(args, sample_result[0], multi_machines_comm_list),
+            _load_subtensorV2(args, sample_result[0]),
             fsi,
         )
     elif args.system == "SP":
@@ -705,12 +429,12 @@ def load_subtensor(args, sample_result, multi_machines_comm_list):
 
         return (
             sample_result[2],
-            _load_subtensorV2(args, sample_result[0], multi_machines_comm_list),
+            _load_subtensorV2(args, sample_result[0]),
             fsi,
         )
     elif args.system == "DP":
         # [0]input_nodes, [1]seeds, [2]blocks
-        return sample_result[2], _load_subtensorV2(args, sample_result[0], multi_machines_comm_list)
+        return sample_result[2], _load_subtensorV2(args, sample_result[0])
     elif args.system == "MP":
         # [0]input_nodes, [1]seeds, [2]blocks, [3]send_size, [4]recv_size
         fsi = MPFeatureShuffleInfo(
@@ -720,7 +444,7 @@ def load_subtensor(args, sample_result, multi_machines_comm_list):
         )
         return (
             sample_result[2],
-            _load_subtensorV2(args, sample_result[0], multi_machines_comm_list),
+            _load_subtensorV2(args, sample_result[0]),
             fsi,
         )
     else:

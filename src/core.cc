@@ -75,8 +75,7 @@ void Initialize(
     state->trainer_id = 1;
   }
   CUDACHECK(cudaSetDevice(local_rank));
-  // CUDACHECK(cudaStreamCreate(&state->nccl_stream));
-  // CUDACHECK(cudaStreamCreate(&state->cuda_copy_stream));
+
   //  init sp_alltoall_size_permute
   std::vector<int> vec_sp_alltoall_size_permute(world_size * 3);
   for (int r = 0; r < world_size; ++r) {

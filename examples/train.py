@@ -63,7 +63,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
     num_cached_feat_elements = partition_data.num_cached_feat_elements
     num_cached_graph_nodes = partition_data.num_cached_graph_nodes
     num_cached_graph_elements = partition_data.num_cached_graph_elements
-    multi_machine_comm_list = partition_data.multi_machine_comm_list
 
     # define define sampler dataloader
     if args.debug:
@@ -174,119 +173,12 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 output_device=device,
             )
     print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
-    # [NOTE] old example
-    # loss_fcn = torch.nn.CrossEntropyLoss()
-    # loss_fcn = F.cross_entropy()
-    # optimizer = torch.optim.Adam(training_model.parameters(), lr=0.003)
     optimizer = torch.optim.Adam(training_model.parameters(), lr=0.001, weight_decay=5e-4)
     dist.barrier()
     print(f"[Note]Rank#{rank} Ready to train\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
 
     training_mode = args.training_mode
-    if training_mode == "sampling":
-        assert False
-        num_epochs = args.num_epochs
-        warmup_epochs = args.warmup_epochs
-        num_data_types = num_layers + 2
-        name = [f"#layer{i}" for i in range(num_layers)]
-        records = [utils.Result() for i in range(num_data_types * 3)]
-        for epoch in range(num_epochs):
-            events = [torch.cuda.Event(enable_timing=True) for _ in range(2)]
-            pre = 0
-            now = 1
-            events[pre].record()
-            for step, sample_result in enumerate(dataloader):
-                print(f"[Note]epoch#{epoch}, step#{step}")
-
-                # t0 = utils.get_time()
-                batch_labels = labels[sample_result[1]]
-                loading_result = npc.load_subtensor(args, sample_result)
-
-                # t1 = utils.get_time()
-
-                batch_pred, end_event = training_model(loading_result)
-                loss = loss_fcn(batch_pred, batch_labels)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                events[now].record()
-                # events[now].synchronize()
-
-                # prof.step()
-
-                # batch_labels = labels[sample_result[1]]
-
-                # pts = cache_mask[sample_result[0]]
-                # num_sample_nodes = pts.numel()
-                # num_cached = sum(pts).item()
-
-                # num_uva = num_sample_nodes - num_cached
-                start_event = sample_result[-1]
-                # end_event.synchronize()
-                torch.cuda.synchronize()
-                record_time = start_event.elapsed_time(end_event)
-                batch_time = events[pre].elapsed_time(events[now])
-                pre ^= 1
-                now ^= 1
-                blocks = sample_result[2]
-                record = [block.num_src_nodes() for block in blocks]
-                record.append(record_time)
-                record.append(batch_time)
-                # record.extend([num_cached, num_sample_nodes, num_cached / num_sample_nodes])
-                # record.append(t_list[0].elapsed_time(t_list[1]))
-                if epoch >= warmup_epochs:
-                    result_tensor = torch.as_tensor(record, dtype=torch.float32, device=device)
-
-                    tensor_list = [torch.empty(num_data_types, dtype=torch.float32, device=device) for _ in range(world_size)]
-                    dist.all_gather(tensor_list, result_tensor)
-
-                    all_record = torch.vstack(tensor_list).transpose(0, 1).tolist()
-                    record = []
-                    for val in all_record:
-                        record.append(max(val))
-                        record.append(min(val))
-                        record.append(statistics.mean(val))
-
-                    for i in range(num_data_types * 3):
-                        records[i].update(record[i])
-
-                events[pre].record()
-
-        if rank == 0:
-            save_pt_file = f"./saved_tensor/{args.tag}_epoch{num_epochs}_sampling_result_{args.fan_out}.pt"
-            all_records = [record.get_all() for record in records]
-            all_records = torch.as_tensor(all_records)
-            print(f"[Note]Save shape:{all_records.shape} to {save_pt_file}")
-            torch.save(all_records, save_pt_file)
-            write_result = [record.get_max_min_avg() for record in records]
-
-            print(f"[Note]Write to logs file {args.logs_dir}")
-            if False:
-                with open(args.logs_dir, "a") as f:
-                    writer = csv.writer(f, lineterminator="\n")
-                    # Tag, System, Dataset, Model, Machines, local batch_size, fanout, hidden size, cache ratio, num_epochs, num batches per epoch, Sampling time, Loading time, Training time,
-                    cache_memory = f"{round(args.cache_memory / (1024*1024*1024), 1)}GB"
-                    cache_value = args.greedy_feat_ratio if args.cache_mode == "greedy" else args.tag.split("_")[-1]
-                    log_info = [
-                        args.tag,
-                        # args.system,
-                        # args.dataset,
-                        # args.model,
-                        # args.machine,
-                        args.batch_size,
-                        args.fan_out,
-                        args.cache_mode,
-                        cache_memory,
-                        # cache_value,
-                        num_cached_feat_nodes,
-                        num_cached_feat_elements,
-                        num_cached_graph_nodes,
-                        num_cached_graph_elements,
-                    ]
-                    log_info.extend(write_result)
-                    writer.writerow(log_info)
-
-    elif training_mode == "training":
+    if training_mode == "training":
         total_time = [0, 0, 0]
         num_epochs = args.num_epochs
         warmup_epochs = args.warmup_epochs
@@ -298,8 +190,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
         import torch.cuda.nvtx as nvtx
 
-        
-        
         prof = utils.build_tensorboard_profiler(
             f"./torch_profiler/multi-machines/{args.tag}_{args.system}"
         )
@@ -320,7 +210,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 # nvtx.range_push("Loading")
 
                 batch_labels = labels[sample_result[1]]
-                loading_result = npc.load_subtensor(args, sample_result, multi_machine_comm_list)
+                loading_result = npc.load_subtensor(args, sample_result)
                 # check feature loading
                 if args.debug:
                     feat_dim_slice = (
@@ -433,7 +323,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                         labels,
                         args.num_classes,
                         val_dataloader,
-                        multi_machine_comm_list,
                     ).to(device)
                     / world_size
                 )
@@ -502,7 +391,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     avg_epoch_time,
                 ]
                 writer.writerow(log_info)
-    npc.terminate_multi_machine_comm_list(multi_machine_comm_list)
     dist.barrier()
     utils.cleanup()
 

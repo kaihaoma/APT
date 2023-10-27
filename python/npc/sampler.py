@@ -112,7 +112,6 @@ class MixedNeighborSampler(object):
         cpu_src = src.detach().cpu()
         cpu_dst = dst.detach().cpu()
         debug_check_flag = torch.all(self.debug_graph.has_edges_between(cpu_src, cpu_dst))
-        # print(f"[Note]Sampling check:{debug_check_flag}")
         assert debug_check_flag, "[Error]Sampling debug_check failed"
 
     def sample(self, graph, seeds):
@@ -264,34 +263,3 @@ class MixedPSNeighborSampler(object):
         input_nodes = seeds
         # torch.cuda.nvtx.range_pop()
         return (input_nodes, output_nodes, blocks) + sampling_result
-
-
-class DGLNeighborSampler(dgl.dataloading.NeighborSampler):
-    def __init__(
-        self,
-        fanouts,
-        edge_dir="in",
-        prob=None,
-        mask=None,
-        replace=False,
-        prefetch_node_feats=None,
-        prefetch_labels=None,
-        prefetch_edge_feats=None,
-        output_device=None,
-    ):
-        super().__init__(
-            fanouts,
-            edge_dir,
-            prob,
-            mask,
-            replace,
-            prefetch_node_feats,
-            prefetch_labels,
-            prefetch_edge_feats,
-            output_device,
-        )
-
-    def sample(self, g, seed_nodes, exclude_eids=None):  # pylint: disable=arguments-differ
-        """Sample a list of blocks from the given seed nodes."""
-        result = self.sample_blocks(g, seed_nodes, exclude_eids=exclude_eids)
-        return result

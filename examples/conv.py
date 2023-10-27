@@ -60,7 +60,6 @@ class EXPSAGEConv(nn.Module):
         num_send_dst = fsi.num_send_dst
         with graph.local_scope():
             # graph.srcdata["h"] = shuffle_vir
-            # print(f"[Note]Graph:{graph}")
             graph.srcdata["h"] = shuffle_feat[num_send_dst:]
             # Message Passing
             msg_fn = fn.copy_u("h", "m")

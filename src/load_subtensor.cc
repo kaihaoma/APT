@@ -48,41 +48,35 @@ torch::Tensor CrossMachineLoadSubtensor(torch::Tensor node_id) {
   auto cpu_options = torch::TensorOptions().dtype(torch::kInt64);
   auto feat_dim = state->feat_storage.feat_dim;
   auto num_nodes = node_id.numel();
-  // LOG(INFO) << "#remote_workers: " << num_remote_workers<< "\t#nodes: " <<
-  // num_nodes;
+
   std::tie(bucket_size, sorted_idx, permutation) =
       MultiMachinesClusterAndPermute(node_id);
 
-  // LOG(INFO) << "Clustered and permuted DONE";
   //  local_req: sorted_idx[:bucket_size[0]]
   //  remote_req: sorted_idx[bucket_size[0]:]
   //  Custom alltoall size
   auto recv_size = torch::empty({num_remote_workers}, cuda_options);
   auto arange = torch::ones({num_remote_workers}, cpu_options);
   CrossMachineAlltoAll(bucket_size, recv_size, arange, arange);
-  // LOG(INFO) << "Rk" << rank << "\t bucket_size: " <<
-  // TensorToString(bucket_size)<< "\t recv_size: " <<
-  // TensorToString(recv_size); custom alltoall remote req
+
   auto cpu_recv_size = recv_size.to(torch::kCPU);
   auto total_recv_size = cpu_recv_size.sum().item<int>();
   // LOG(INFO) << "total_recv_size: " << total_recv_size;
   auto all_req = torch::empty({total_recv_size}, cuda_options);
   auto cpu_bucket_size = bucket_size.to(torch::kCPU);
+  // custom alltoall remote req
   CrossMachineAlltoAll(sorted_idx, all_req, cpu_bucket_size, cpu_recv_size);
 
-  // LOG(INFO) << "Done sending all_req, size: " << all_req.sizes();
   //  local uva feature loading in ONE KERNEL
   auto feats = LoadSubtensor(all_req);
-
-  // LOG(INFO) << "Done local loading, size: " << feats.sizes();
 
   auto recv_feats = torch::empty({num_nodes * feat_dim}, feats.options());
   // custom alltoall send back feats to remote
   CrossMachineAlltoAll(
       feats, recv_feats, cpu_recv_size, cpu_bucket_size, feat_dim);
-  // LOG(INFO) << "Done sending back feats, size: " << recv_feats.sizes();
+
   recv_feats = recv_feats.reshape({num_nodes, feat_dim}).index({permutation});
-  // LOG(INFO) << "Done reshaping feats, size: " << recv_feats.sizes();
+
   return recv_feats;
 }
 
