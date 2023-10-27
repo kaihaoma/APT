@@ -8,7 +8,7 @@ import importlib
 def get_pre_defined_args():
     cache_memory_in_gbs = [1]
     # cache_memory_in_gbs = [0, 1, 2, 3, 4, 5]
-    system = ["MP"]
+    system = ["SP"]
     # generate args
     for try_times in range(1):
         for cache_mem in cache_memory_in_gbs:

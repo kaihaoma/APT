@@ -199,26 +199,38 @@ class MixedPSNeighborSampler(object):
                     sampling_result = (perm, send_offset, recv_offset)
 
                 elif self.system == "SP":
+                    # torch.cuda.nvtx.range_push("SP sample")
+                    # torch.cuda.nvtx.range_push("tovir")
                     map_allnodes = srcdst_to_vir(fanout, seeds, neighbors)
+                    # torch.cuda.nvtx.range_pop()
+                    # torch.cuda.nvtx.range_push("sort")
                     sorted_allnodes, perm_allnodes = torch.sort(map_allnodes)
+                    # torch.cuda.nvtx.range_pop()
                     num_dst = seeds.numel()
                     map_src = sorted_allnodes[num_dst:]
 
+                    # torch.cuda.nvtx.range_push("unique")
                     unique_frontier, arange_src = torch.unique(map_src, return_inverse=True)
+                    # torch.cuda.nvtx.range_pop()
                     # build block1 by dgl.create_block
                     num_dst = seeds.numel()
                     device = seeds.device
                     arange_dst = torch.arange(num_dst, device=device).repeat_interleave(fanout)
-                    block1 = dgl.create_block((arange_src, arange_dst))
+                    # torch.cuda.nvtx.range_push("create block1")
+                    block1 = create_block_from_coo(arange_src, arange_dst, unique_frontier.numel(), num_dst)
+                    # torch.cuda.nvtx.range_pop()
                     blocks.insert(0, block1)
                     # send_frontier = [dst, (pack virtual nodes and original)]
+                    # torch.cuda.nvtx.range_push("create frontier")
                     send_frontier = torch.cat(
                         (
                             seeds[perm_allnodes[:num_dst]],
                             self.sp_val + (map_src % num_dst) * self.num_total_nodes + neighbors[perm_allnodes[num_dst:] - num_dst],
                         )
                     )
+                    # torch.cuda.nvtx.range_pop()
 
+                    # torch.cuda.nvtx.range_push("shuffle")
                     (
                         recv_dst,
                         recv_seeds,
@@ -231,13 +243,18 @@ class MixedPSNeighborSampler(object):
                         sorted_allnodes,  # sorted_allnodes
                         unique_frontier,  # unique_frontier
                     )
+                    # torch.cuda.nvtx.range_pop()
 
                     # build block2 by dgl.to_block
-                    block2_graph = dgl.graph((recv_neighbors, recv_seeds))
-                    block2 = dgl.to_block(block2_graph, include_dst_in_src=False)
-                    seeds = torch.cat((recv_dst, block2.srcdata[dgl.NID]))
+                    # torch.cuda.nvtx.range_push("create block2")
+                    unique_src, arange_src = torch.unique(recv_neighbors, return_inverse=True)
+                    unique_dst, arange_dst = torch.unique(recv_seeds, return_inverse=True)
+                    block2 = create_block_from_coo(arange_src, arange_dst, unique_src.numel(), unique_dst.numel())
+                    # torch.cuda.nvtx.range_pop()
+                    seeds = torch.cat((recv_dst, unique_src))
                     blocks.insert(0, block2)
                     sampling_result = (send_sizes, recv_sizes)
+                    # torch.cuda.nvtx.range_pop()
 
                 elif self.system == "MP":
                     unique_frontier, coo_row = tensor_relabel_csc(seeds, neighbors)
@@ -255,11 +272,9 @@ class MixedPSNeighborSampler(object):
                     seeds = all_frontier
 
             if layer_id != self.num_layers - 1 or self.system not in ("SP", "MP"):
-                # torch.cuda.nvtx.range_push("construct block")
                 block = create_dgl_block(seeds, neighbors, fanout)
                 seeds = block.srcdata[dgl.NID]
                 blocks.insert(0, block)
-                # torch.cuda.nvtx.range_pop()
 
         input_nodes = seeds
         # torch.cuda.nvtx.range_pop()
