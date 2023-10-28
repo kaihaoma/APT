@@ -163,7 +163,6 @@ class MixedPSNeighborSampler(object):
         self.debug_flag = False
         self.num_total_nodes = num_total_nodes
         self.sp_val = (rank << 20) * num_total_nodes
-        print(f"[Note]debug_info:{debug_info}")
         if debug_info is not None:
             self.debug_graph, self.debug_min_vids, self.num_nodes = debug_info
             self.debug_flag = True
@@ -208,7 +207,7 @@ class MixedPSNeighborSampler(object):
                     num_dst = seeds.numel()
                     device = seeds.device
                     arange_dst = torch.arange(num_dst, device=device).repeat_interleave(fanout)
-                    block1 = dgl.create_block((arange_src, arange_dst))
+                    block1 = create_block_from_coo(arange_src, arange_dst, unique_frontier.numel(), num_dst)
                     blocks.insert(0, block1)
                     # send_frontier = [dst, (pack virtual nodes and original)]
                     send_frontier = torch.cat(
@@ -232,9 +231,10 @@ class MixedPSNeighborSampler(object):
                     )
 
                     # build block2 by dgl.to_block
-                    block2_graph = dgl.graph((recv_neighbors, recv_seeds))
-                    block2 = dgl.to_block(block2_graph, include_dst_in_src=False)
-                    seeds = torch.cat((recv_dst, block2.srcdata[dgl.NID]))
+                    unique_src, arange_src = torch.unique(recv_neighbors, return_inverse=True)
+                    unique_dst, arange_dst = torch.unique(recv_seeds, return_inverse=True)
+                    block2 = create_block_from_coo(arange_src, arange_dst, unique_src.numel(), unique_dst.numel())
+                    seeds = torch.cat((recv_dst, unique_src))
                     blocks.insert(0, block2)
                     sampling_result = (send_sizes, recv_sizes)
 

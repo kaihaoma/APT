@@ -189,12 +189,12 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         args.num_batches_per_epoch = TEST_BATCHES
 
         import torch.cuda.nvtx as nvtx
-
-        prof = utils.build_tensorboard_profiler(
-            f"./torch_profiler/multi-machines/{args.tag}_{args.system}"
-        )
+        """
+        """
+        prof = utils.build_tensorboard_profiler(f"./torch_profiler/single_machine_papers/{args.tag}_{args.system}")
         args.num_epochs = 1
         """
+
         featloading_log_list = []
         record_list = [[] for _ in range(6)]
         for epoch in range(args.num_epochs):
@@ -251,14 +251,14 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     print(
                         f"[Note]Rank#{rank} epoch#{epoch},batch#{step} Loss: {loss:.3f}\t acc:{accuracy:.3f}")
                 """
-                ms_samping_time = t0 - t2
+                ms_samping_time = 1000.0 * (t0 - t2)
                 # t2 = utils.get_time()
                 bt2, t2 = utils.get_time_straggler()
-                # prof.step()
+                #prof.step()
                 # nvtx.range_pop()
                 # nvtx.range_push("Sampling")
-                ms_loading_time = t1 - t0
-                ms_training_time = t2 - t1
+                ms_loading_time = 1000.0 * (t1 - t0)
+                ms_training_time = 1000.0 * (t2 - t1)
 
                 if epoch >= warmup_epochs:
                     total_time[0] += ms_samping_time
@@ -335,18 +335,21 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     )
                     print(f"[Note]{acc_str}")
                     acc_file.write(acc_str)
+
+        # print record_list[i] max min avg
+        """
         dist.barrier()
         for i in range(6):
-            # print record_list[i] max min avg
-            maxx = round(max(record_list[i]) * 1000, 2)
-            minn = round(min(record_list[i]) * 1000, 2)
-            avgg = round(sum(record_list[i]) / len(record_list[i]) * 1000, 2)
+            
+            maxx = round(max(record_list[i]), 2)
+            minn = round(min(record_list[i]), 2)
+            avgg = round(sum(record_list[i]) / len(record_list[i]), 2)
             print(f"[Note]Rank#{rank} epoch#{epoch} step#{i} max:{maxx} min:{minn} avg:{avgg}")
+        """
         if args.debug and rank == 0:
             acc_file.close()
         if not args.debug and rank == 0 and args.num_epochs > 1:
             # costmodel log
-
             """
             featloading_log = torch.stack(featloading_log_list)
             print(f"[Note]featloading_log:{featloading_log.shape}")
@@ -356,10 +359,24 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 writer.writerow(featloading_log_mean)
             """
 
-            avg_time_epoch_sampling = round(total_time[0] * 1000.0 / num_record_epochs, 4)
-            avg_time_epoch_loading = round(total_time[1] * 1000.0 / num_record_epochs, 4)
-            avg_time_epoch_training = round(total_time[2] * 1000.0 / num_record_epochs, 4)
-            print(f"[Note]Write to logs file {args.logs_dir}\t tag:{args.tag}")
+            avg_time_epoch_sampling = round(total_time[0] / num_record_epochs, 4)
+            avg_time_epoch_loading = round(total_time[1] / num_record_epochs, 4)
+            avg_time_epoch_training = round(total_time[2] / num_record_epochs, 4)
+
+            # cross-machine feature loading variance check
+            to_check_idx = [0, 2, 4]
+            check_flag = True
+            fail_idx = []
+            for cid in to_check_idx:
+                variance = max(record_list[cid]) / min(record_list[cid])
+                print(f"[Note]Checking Index{cid} variance:{variance}")
+                if variance > 2:
+                    check_flag = False
+                    fail_idx.append(cid)
+                    
+            if not check_flag:
+                args.tag = f"variance{fail_idx}_{args.tag}"
+
             with open(args.logs_dir, "a") as f:
                 writer = csv.writer(f, lineterminator="\n")
                 # Tag, System, Dataset, Model, Machines, local batch_size, fanout, cache_mode, cache_memory, cache_value, feat cache node, feat cache element, graph cache node, graph cache element, num_epochs, num batches per epoch, Sampling time, Loading time, Training time,
@@ -367,6 +384,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 cache_value = args.greedy_feat_ratio if args.cache_mode == "greedy" else args.tag.split("_")[-1]
                 avg_epoch_time = round(avg_time_epoch_sampling + avg_time_epoch_loading + avg_time_epoch_training, 2)
                 write_tag = f"{args.tag}_{args.system}"
+
                 log_info = [
                     write_tag,
                     # args.system,

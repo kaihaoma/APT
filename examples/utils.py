@@ -297,7 +297,7 @@ def init_args(args=None) -> argparse.Namespace:
     parser.add_argument("--max_cache_feat_nodes", type=int, default=-1, help="Ratio of the number of graph topology cached in GPU memory")
 
     parser.add_argument("--batch_size", type=int, default=1024, help="local batch size")
-    parser.add_argument("--num_epochs", type=int, default=10, help="number of epochs")
+    parser.add_argument("--num_epochs", type=int, default=7, help="number of epochs")
     parser.add_argument("--fan_out", type=str, default="10,10,10", help="Fanout, in reverse order from k-hop to 1-hop")
     parser.add_argument("--dropout", default=0.5)
     parser.add_argument("--num_nodes", type=int, default=-1, help="number of total nodes")
@@ -382,4 +382,5 @@ def init_args(args=None) -> argparse.Namespace:
 
     # set dgl backend to pytorch
     os.environ["DGLBACKEND"] = "pytorch"
+    os.environ["OMP_NUM_THREADS"] = str(mp.cpu_count() // 2 // nproc)
     return args

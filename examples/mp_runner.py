@@ -6,15 +6,18 @@ import importlib
 
 
 def get_pre_defined_args():
-    cache_memory_in_gbs = [1]
-    # cache_memory_in_gbs = [0, 1, 2, 3, 4, 5]
-    system = ["DP", "NP", "SP", "MP"]
+    # cache_memory_in_gbs = [1]
+    cache_memory_in_gbs = list(range(6))
+    system = ["DP", "NP"]
+    num_localnode_feats = [4, 5, 6, 7]
     # generate args
-    for try_times in range(1):
-        for cache_mem in cache_memory_in_gbs:
-            for sys in system:
-                cm = cache_mem * 1024 * 1024 * 1024
-                yield {"system": sys, "cache_memory": cm}
+    for try_times in range(3):
+        for sys in system:
+            for cache_mem in cache_memory_in_gbs:
+                for nl in num_localnode_feats:
+                    cm = cache_mem * 1024 * 1024 * 1024
+                    tag = f"{sys}_nl{nl}/8_cm{cache_mem}GB"
+                    yield {"system": sys, "cache_memory": cm, "num_localnode_feats": nl, "tag": tag}
 
 
 if __name__ == "__main__":

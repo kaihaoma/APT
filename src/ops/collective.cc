@@ -207,7 +207,6 @@ void _CrossMachineAlltoAll(
   int world_size = state->world_size;
   cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   auto nccl_comm = state->nccl_comm_list[comm_type];
-  auto remote_worker_id = state->vec_remote_worker_id;
   // auto remote_worker_map = state->vec_remote_worker_map;
   auto num_remote_workers = state->num_remote_workers;
   IdType send_off = send_size[0];
@@ -217,10 +216,10 @@ void _CrossMachineAlltoAll(
   for (int r = 1; r < num_remote_workers; ++r) {
     NCCLCHECK(ncclSend(
         input + send_off * expand, send_size[r] * expand, NCCL_DATA_TYPE,
-        remote_worker_id[r], nccl_comm, stream));
+        state->vec_remote_worker_id[r], nccl_comm, stream));
     NCCLCHECK(ncclRecv(
         output + recv_off * expand, recv_size[r] * expand, NCCL_DATA_TYPE,
-        remote_worker_id[r], nccl_comm, stream));
+        state->vec_remote_worker_id[r], nccl_comm, stream));
     send_off += send_size[r];
     recv_off += recv_size[r];
   }
@@ -229,7 +228,7 @@ void _CrossMachineAlltoAll(
   cudaMemcpyAsync(
       output, input, send_size[0] * expand * sizeof(T),
       cudaMemcpyDeviceToDevice, stream);
-  CUDACHECK(cudaStreamSynchronize(stream));
+  // CUDACHECK(cudaStreamSynchronize(stream));
 }
 
 void CrossMachineAlltoAll(

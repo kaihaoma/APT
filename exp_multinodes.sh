@@ -1,7 +1,7 @@
 master_addr=172.31.40.2
 fanout_array=(10,10,10)
 configs=papers_w8_metis
-configs=products_w8
+#configs=products_w8
 logs_dir=./logs/ap/new_machines2.csv
 
 for num_localnode_feats_in_workers in 0
