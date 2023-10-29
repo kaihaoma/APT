@@ -19,7 +19,7 @@ class Aggregate(torch.autograd.Function):
         all_coo_row, all_coo_col, coo_offset = ctx.graph
         X_offset, out_offset = ctx.saved_tensors
         dX = torch.ops.npc.spmm_copy_u_sum(all_coo_col, all_coo_row, dZ, coo_offset, out_offset, X_offset)
-        return None, dX
+        return None, dX, None, None
 
 
 class MPSAGEConv(nn.Module):
