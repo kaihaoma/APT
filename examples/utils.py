@@ -38,10 +38,9 @@ def evaluate(args, model, labels, num_classes, dataloader):
         with torch.no_grad():
             # x = gather_pinned_tensor_rows(feats, input_nodes)
             # y = gather_pinned_tensor_rows(labels, output_nodes)
-
             y = labels[sampling_result[1]]
             ys.append(y)
-            y_hats.append(model(loading_result)[0])
+            y_hats.append(model(loading_result))
 
     return MF.accuracy(torch.cat(y_hats), torch.cat(ys), task="multiclass", num_classes=num_classes)
 

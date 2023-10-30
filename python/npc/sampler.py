@@ -117,7 +117,7 @@ class MixedNeighborSampler(object):
     def sample(self, graph, seeds):
         output_nodes = seeds
         blocks = []
-        event = MyEvent()
+        #event = MyEvent()
         for fanout in reversed(self.fir_fanouts):
             seeds, neighbors = local_sample_one_layer(seeds, fanout)
             replicated_seeds = torch.repeat_interleave(seeds, fanout)
@@ -130,7 +130,7 @@ class MixedNeighborSampler(object):
         # last layer
         # Shape seeds = sum(send_offset)
         # Shape negibors = sum(send_offset) * self.las_fanouts
-        event.record()
+        #event.record()
         seeds, neighbors, perm, send_offset, recv_offset = np_sample_and_shuffle(seeds, self.las_fanouts)
         replicated_seeds = torch.repeat_interleave(seeds, self.las_fanouts)
         if self.debug_flag:
@@ -141,7 +141,7 @@ class MixedNeighborSampler(object):
         blocks.insert(0, block)
         seeds = block.srcdata[dgl.NID]
 
-        return seeds, output_nodes, blocks, perm, send_offset, recv_offset, event
+        return seeds, output_nodes, blocks, perm, send_offset, recv_offset
 
 
 class MixedPSNeighborSampler(object):

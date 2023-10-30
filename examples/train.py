@@ -191,12 +191,11 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         import torch.cuda.nvtx as nvtx
         """
         """
-        prof = utils.build_tensorboard_profiler(f"./torch_profiler/single_machine_papers/{args.tag}_{args.system}")
+        prof = utils.build_tensorboard_profiler(f"./torch_profiler/latest_papers/{args.tag}_{args.system}")
         args.num_epochs = 1
         """
 
-        featloading_log_list = []
-        record_list = [[] for _ in range(6)]
+        record_list = []
         for epoch in range(args.num_epochs):
             epoch_tic_start = utils.get_time()
             # t2 = utils.get_time()
@@ -225,7 +224,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
                     debug_loading_result = debug_global_features[sample_result[0].to("cpu"), feat_dim_slice]
                     debug_loading_flag = torch.all(torch.eq(loading_result[1].detach().cpu(), debug_loading_result))
-                    print(f"[Note]Feature loading check: {debug_loading_flag}")
                     assert debug_loading_flag
 
                 # t1 = utils.get_time()
@@ -254,7 +252,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 ms_samping_time = 1000.0 * (t0 - t2)
                 # t2 = utils.get_time()
                 bt2, t2 = utils.get_time_straggler()
-                #prof.step()
+                # prof.step()
                 # nvtx.range_pop()
                 # nvtx.range_push("Sampling")
                 ms_loading_time = 1000.0 * (t1 - t0)
@@ -265,54 +263,24 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     total_time[1] += ms_loading_time
                     total_time[2] += ms_training_time
 
-                    # recording logging info
                     record_val = [
                         ms_samping_time,
-                        t0 - bt0,
+                        # t0 - bt0,
                         ms_loading_time,
-                        t1 - bt1,
+                        # t1 - bt1,
                         ms_training_time,
-                        t2 - bt2,
+                        # t2 - bt2,
                     ]
-                    for i in range(6):
-                        record_list[i].append(record_val[i])
-                    """
-                    # Feat loading
-                    num_gpu_cache_hit = torch.sum(
-                        cache_mask[sample_result[0].cpu()]
-                    ).item()
-                    num_total_nodes = sample_result[0].numel()
+                    record_list.append(record_val)
 
-                    to_send_tensor = torch.FloatTensor(
-                        [
-                            ms_samping_time,
-                            ms_loading_time,
-                            ms_training_time,
-                            num_gpu_cache_hit,
-                            num_total_nodes,
-                        ]
-                    ).to(device)
-                    if args.system != "DP":
-                        to_send_tensor = torch.cat(
-                            (to_send_tensor, sample_result[-2], sample_result[-1])
-                        )
-                    output_tensor_list = (
-                        [torch.empty_like(to_send_tensor) for _ in range(world_size)]
-                        if rank == 0
-                        else None
-                    )
-                    dist.gather(to_send_tensor, output_tensor_list, 0)
-                    if rank == 0:
-                        output_tensor_list = torch.cat(output_tensor_list).cpu()
-                        featloading_log_list.append(output_tensor_list)
-                    """
                 if step >= LIMIT_BATCHES:
                     break
 
                 t2 = utils.get_time()
 
             epoch_tic_end = utils.get_time()
-            print(f"Rank: {rank} | Epoch: {epoch} | Epoch time: {epoch_tic_end - epoch_tic_start:.3f} s")
+            if not args.debug:
+                print(f"Rank: {rank} | Epoch: {epoch} | Epoch time: {epoch_tic_end - epoch_tic_start:.3f} s")
 
             # evaluate
             if args.debug:
@@ -336,32 +304,18 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     print(f"[Note]{acc_str}")
                     acc_file.write(acc_str)
 
-        # print record_list[i] max min avg
-        """
-        dist.barrier()
-        for i in range(6):
-            
-            maxx = round(max(record_list[i]), 2)
-            minn = round(min(record_list[i]), 2)
-            avgg = round(sum(record_list[i]) / len(record_list[i]), 2)
-            print(f"[Note]Rank#{rank} epoch#{epoch} step#{i} max:{maxx} min:{minn} avg:{avgg}")
-        """
         if args.debug and rank == 0:
             acc_file.close()
         if not args.debug and rank == 0 and args.num_epochs > 1:
-            # costmodel log
-            """
-            featloading_log = torch.stack(featloading_log_list)
-            print(f"[Note]featloading_log:{featloading_log.shape}")
-            featloading_log_mean = torch.mean(featloading_log, dim=0).tolist()
-            with open(f"./logs/costmodel/{args.system}.csv", "a") as f:
-                writer = csv.writer(f, lineterminator="\n")
-                writer.writerow(featloading_log_mean)
-            """
-
             avg_time_epoch_sampling = round(total_time[0] / num_record_epochs, 4)
             avg_time_epoch_loading = round(total_time[1] / num_record_epochs, 4)
             avg_time_epoch_training = round(total_time[2] / num_record_epochs, 4)
+
+            # write record to csv file
+            record_path = f"./logs/record/{args.tag}.csv"
+            with open(record_path, "a") as f:
+                writer = csv.writer(f, lineterminator="\n")
+                writer.writerows(record_list)
 
             # cross-machine feature loading variance check
             to_check_idx = [0, 2, 4]
@@ -373,7 +327,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 if variance > 2:
                     check_flag = False
                     fail_idx.append(cid)
-                    
+
             if not check_flag:
                 args.tag = f"variance{fail_idx}_{args.tag}"
 

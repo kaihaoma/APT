@@ -228,7 +228,7 @@ void _CrossMachineAlltoAll(
   cudaMemcpyAsync(
       output, input, send_size[0] * expand * sizeof(T),
       cudaMemcpyDeviceToDevice, stream);
-  // CUDACHECK(cudaStreamSynchronize(stream));
+  CUDACHECK(cudaStreamSynchronize(stream));
 }
 
 void CrossMachineAlltoAll(

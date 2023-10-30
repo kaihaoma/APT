@@ -14,12 +14,9 @@ do
     configs_path=./npc_dataset/${configs}/configs.json
     cache_mode=dryrun
     
-    python examples/mp_runner.py --world_size ${world_size} --nproc_per_node=${nproc_per_node} --node_rank=$1  --master_addr=${master_addr} --master_port=12345 --num_localnode_feats_in_workers ${num_localnode_feats_in_workers} --logs_dir ${logs_dir} --tag multinodes_Oct13_${configs}_${num_localnode_feats_in_workers} --configs_path ${configs_path} --cache_mode ${cache_mode} 
+    python examples/mp_runner.py --world_size ${world_size} --nproc_per_node=${nproc_per_node} --node_rank=$1  --master_addr=${master_addr} --master_port=12345 --num_localnode_feats_in_workers ${num_localnode_feats_in_workers} --logs_dir ${logs_dir} --tag multinodes_Oct30 --configs_path ${configs_path} --cache_mode ${cache_mode} 
 
     done
     #sleep 5
   done
 done
-
-echo "[Note]Done train scirpts, run hang-on scripts" 
-python train.py
