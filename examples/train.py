@@ -30,7 +30,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
     args.rank = rank
     args.local_rank = local_rank
     args.device = device
-    backend = "NCCL" if args.nproc_per_node == -1 else None
+    backend = "NCCL"
     utils.setup(
         rank=rank,
         local_rank=local_rank,
@@ -230,6 +230,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 bt1, t1 = utils.get_time_straggler()
                 # nvtx.range_pop()
                 # nvtx.range_push("Training")
+
                 batch_pred = training_model(loading_result)
                 loss = F.cross_entropy(batch_pred, batch_labels)
                 if args.debug:
@@ -318,11 +319,11 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 writer.writerows(record_list)
 
             # cross-machine feature loading variance check
-            to_check_idx = [0, 2, 4]
             check_flag = True
             fail_idx = []
-            for cid in to_check_idx:
-                variance = max(record_list[cid]) / min(record_list[cid])
+            for cid in range(3):
+                vals = [e[cid] for e in record_list]
+                variance = max(vals) / min(vals)
                 print(f"[Note]Checking Index{cid} variance:{variance}")
                 if variance > 2:
                     check_flag = False

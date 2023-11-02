@@ -329,7 +329,7 @@ __global__ void _CountMultiMachinesDeviceKernel(
   __shared__ IdType local_count[MAX_NUM_DEVICES];
   IdType idx = blockDim.x * blockIdx.x + threadIdx.x;
   IdType stride = gridDim.x * blockDim.x;
-  if (threadIdx.x <= num_remote_workers) {
+  if (threadIdx.x <= world_size) {
     device_vid[threadIdx.x] = min_vids[threadIdx.x];
     local_count[threadIdx.x] = 0;
   }
