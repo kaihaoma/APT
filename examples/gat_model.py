@@ -325,7 +325,7 @@ class MPGAT(nn.Module):
             # ddp
             ddp_config = SimpleConfig(
                 fan_out=fan_out[:-1],
-                input_dim=n_hidden,
+                input_dim=n_hidden * heads[0],
                 num_hidden=n_hidden,
                 num_classes=n_classes,
                 dropout=dropout,
@@ -353,8 +353,6 @@ class MPGAT(nn.Module):
         # fir mp layer
         h = self.mp_layers(blocks[0], h, fsi)
         h = h.flatten(1)
-        # custom shuffle
-        h = npc.MPFeatureShuffle.apply(fsi, h)
 
         h = self.ddp_modules((blocks[1:], h))
         h = h.mean(1)
