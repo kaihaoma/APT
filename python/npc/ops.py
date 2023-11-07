@@ -383,7 +383,7 @@ def register_multi_machines_scheme(args: argparse.Namespace) -> Optional[torch.T
     torch.ops.npc.register_multi_machines_scheme(gpu_remote_worker_map, remote_worker_id)
 
 
-def _load_subtensorV2(
+def _load_subtensor(
     args: argparse.Namespace,
     seeds: torch.Tensor,
 ) -> torch.Tensor:
@@ -406,35 +406,34 @@ def load_subtensor(args, sample_result):
         )
         return (
             sample_result[2],
-            _load_subtensorV2(args, sample_result[0]),
+            _load_subtensor(args, sample_result[0]),
             fsi,
         )
     elif args.system == "SP":
         # [0]input_nodes [1] seeds, [2]blocks [3]send_size [4]recv_size
         send_sizes = sample_result[3].to("cpu")
         recv_sizes = sample_result[4].to("cpu")
-        num_send_dst = send_sizes[0::3].sum().item()
-        num_recv_dst = recv_sizes[0::3].sum().item()
-        total_send_size = num_send_dst + send_sizes[2::3].sum().item()
-        total_recv_size = num_recv_dst + recv_sizes[2::3].sum().item()
+        num_dst = sample_result[2][2].number_of_src_nodes()
+        total_send_size = send_sizes[1::2].sum().item()
+        total_recv_size = recv_sizes[1::2].sum().item()
+
         fsi = SPFeatureShuffleInfo(
             feat_dim=args.num_hidden,
             send_sizes=send_sizes,
             recv_sizes=recv_sizes,
-            num_send_dst=num_send_dst,
-            num_recv_dst=num_recv_dst,
+            num_dst=num_dst,
             total_send_size=total_send_size,
             total_recv_size=total_recv_size,
         )
 
         return (
             sample_result[2],
-            _load_subtensorV2(args, sample_result[0]),
+            _load_subtensor(args, sample_result[0]),
             fsi,
         )
     elif args.system == "DP":
         # [0]input_nodes, [1]seeds, [2]blocks
-        return sample_result[2], _load_subtensorV2(args, sample_result[0])
+        return sample_result[2], _load_subtensor(args, sample_result[0])
     elif args.system == "MP":
         # [0]input_nodes, [1]seeds, [2]blocks, [3]send_size, [4]recv_size
         fsi = MPFeatureShuffleInfo(
@@ -444,7 +443,7 @@ def load_subtensor(args, sample_result):
         )
         return (
             sample_result[2],
-            _load_subtensorV2(args, sample_result[0]),
+            _load_subtensor(args, sample_result[0]),
             fsi,
         )
     else:
@@ -500,8 +499,7 @@ class SPFeatureShuffleInfo(object):
     feat_dim: int
     send_sizes: torch.Tensor
     recv_sizes: torch.Tensor
-    num_send_dst: int
-    num_recv_dst: int
+    num_dst: int
     total_send_size: int
     total_recv_size: int
 

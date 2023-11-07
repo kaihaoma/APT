@@ -77,10 +77,10 @@ void Initialize(
   CUDACHECK(cudaSetDevice(local_rank));
 
   //  init sp_alltoall_size_permute
-  std::vector<int> vec_sp_alltoall_size_permute(world_size * 3);
+  std::vector<int> vec_sp_alltoall_size_permute(world_size * 2);
   for (int r = 0; r < world_size; ++r) {
-    for (int i = 0; i < 3; ++i) {
-      vec_sp_alltoall_size_permute[r * 3 + i] = i * world_size + r;
+    for (int i = 0; i < 2; ++i) {
+      vec_sp_alltoall_size_permute[r * 2 + i] = i * world_size + r;
     }
   }
   state->sp_alltoall_size_permute = torch::tensor(vec_sp_alltoall_size_permute);

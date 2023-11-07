@@ -26,25 +26,11 @@ std::vector<torch::Tensor> NPSampleAndShuffle(
 
 // shuffle seeds based on min_vids
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-ShuffleSeeds(torch::Tensor seeds, IdType base1 = 1);
-
-// SP sample shuffle
-//  input: seeds, map_virtual_nodes, fanout
-//  output:
-//  1.shuffled_virtual_nodes
-//  2.replicated_shuffled_virtual_nodes
-//  3.original_neighbors
-//  4.permutation (map_virtual_nodes)
-//  5.send_offset (map_virtual_nodes)
-//  6.recv_offset (map_virtual_nodes)
-//  7.shuffled_seeds
-//  8.permutation (seeds)
-//  9.send_offset (seeds)
-//  10.recv_offset (seeds)
-std::vector<torch::Tensor> SPSampleAndShuffle2(
-    torch::Tensor seeds, torch::Tensor map_virtual_nodes, IdType fanout);
+ShuffleSeeds(torch::Tensor seeds);
 
 torch::Tensor SrcDsttoVir(IdType fanout, torch::Tensor dst, torch::Tensor src);
+
+torch::Tensor SrcToVir(IdType fanout, IdType num_dst, torch::Tensor src);
 
 // SP sample shuffle
 //  input: seeds, frontier, seeds

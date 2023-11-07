@@ -111,7 +111,7 @@ class DGLSAGE(nn.Module):
         h = x
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
             h = layer(block, h)
-            if l != len(self.layers) - 1:
+            if l != self.n_layers - 1:
                 h = self.activation(h)
                 h = self.dropout(h)
         return h

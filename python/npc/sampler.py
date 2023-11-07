@@ -16,6 +16,10 @@ def srcdst_to_vir(fanout: int, dst: torch.Tensor, src: torch.Tensor) -> torch.Te
     return torch.ops.npc.srcdst_to_vir(fanout, dst, src)
 
 
+def src_to_vir(fanout: int, num_dst: int, src: torch.Tensor) -> torch.Tensor:
+    return torch.ops.npc.src_to_vir(fanout, num_dst, src)
+
+
 def sp_sample_and_shuffle(
     num_dst: int,
     send_frontier: torch.Tensor,
@@ -117,7 +121,7 @@ class MixedNeighborSampler(object):
     def sample(self, graph, seeds):
         output_nodes = seeds
         blocks = []
-        #event = MyEvent()
+        # event = MyEvent()
         for fanout in reversed(self.fir_fanouts):
             seeds, neighbors = local_sample_one_layer(seeds, fanout)
             replicated_seeds = torch.repeat_interleave(seeds, fanout)
@@ -130,7 +134,7 @@ class MixedNeighborSampler(object):
         # last layer
         # Shape seeds = sum(send_offset)
         # Shape negibors = sum(send_offset) * self.las_fanouts
-        #event.record()
+        # event.record()
         seeds, neighbors, perm, send_offset, recv_offset = np_sample_and_shuffle(seeds, self.las_fanouts)
         replicated_seeds = torch.repeat_interleave(seeds, self.las_fanouts)
         if self.debug_flag:
@@ -197,10 +201,9 @@ class MixedPSNeighborSampler(object):
                     sampling_result = (perm, send_offset, recv_offset)
 
                 elif self.system == "SP":
-                    map_allnodes = srcdst_to_vir(fanout, seeds, neighbors)
-                    sorted_allnodes, perm_allnodes = torch.sort(map_allnodes)
                     num_dst = seeds.numel()
-                    map_src = sorted_allnodes[num_dst:]
+                    map_src = src_to_vir(fanout, num_dst, neighbors)
+                    sorted_mapsrc, perm_mapsrc = torch.sort(map_src)
 
                     unique_frontier, arange_src = torch.unique(map_src, return_inverse=True)
                     # build block1 by dgl.create_block
@@ -209,16 +212,16 @@ class MixedPSNeighborSampler(object):
                     arange_dst = torch.arange(num_dst, device=device).repeat_interleave(fanout)
                     block1 = create_block_from_coo(arange_src, arange_dst, unique_frontier.numel(), num_dst)
                     blocks.insert(0, block1)
-                    # send_frontier = [dst, (pack virtual nodes and original)]
-                    send_frontier = torch.cat(
-                        (
-                            seeds[perm_allnodes[:num_dst]],
-                            self.sp_val + (map_src % num_dst) * self.num_total_nodes + neighbors[perm_allnodes[num_dst:] - num_dst],
-                        )
+
+                    # send_frontier = (pack virtual nodes(with global id) and original)
+                    # [from_rank, ori_dst, ori_src]
+                    # rules of send_frontier: from_rank * (num_total_nodes * num_total_nodes) + perm_st * num_total_nodes + neighbors[perm_mapsrc]
+                    perm_dst = seeds.repeat_interleave(fanout)[perm_mapsrc]
+                    send_frontier = (
+                        self.rank * (self.num_total_nodes * self.num_total_nodes) + perm_dst * self.num_total_nodes + neighbors[perm_mapsrc]
                     )
 
                     (
-                        recv_dst,
                         recv_seeds,
                         recv_neighbors,
                         send_sizes,
@@ -226,7 +229,7 @@ class MixedPSNeighborSampler(object):
                     ) = sp_sample_and_shuffle(
                         num_dst,  # num_dst
                         send_frontier,  # send_frontier
-                        sorted_allnodes,  # sorted_allnodes
+                        sorted_mapsrc,  # sorted_mapsrc
                         unique_frontier,  # unique_frontier
                     )
 
@@ -234,9 +237,12 @@ class MixedPSNeighborSampler(object):
                     unique_src, arange_src = torch.unique(recv_neighbors, return_inverse=True)
                     unique_dst, arange_dst = torch.unique(recv_seeds, return_inverse=True)
                     block2 = create_block_from_coo(arange_src, arange_dst, unique_src.numel(), unique_dst.numel())
-                    seeds = torch.cat((recv_dst, unique_src))
+
                     blocks.insert(0, block2)
                     sampling_result = (send_sizes, recv_sizes)
+
+                    # seeds contains original dst nodes and recv src nodes
+                    seeds = torch.cat((seeds, unique_src))
 
                 elif self.system == "MP":
                     unique_frontier, coo_row = tensor_relabel_csc(seeds, neighbors)
