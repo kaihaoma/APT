@@ -58,6 +58,25 @@ void CopyUSumCUDA(
     torch::Tensor output, torch::Tensor coo_offset, torch::Tensor input_offset,
     torch::Tensor output_offset);
 
+void CopyESumCUDA(
+    torch::Tensor coo_row, torch::Tensor coo_col, torch::Tensor input,
+    torch::Tensor output, torch::Tensor coo_offset,
+    torch::Tensor output_offset);
+
+void UMulESumCUDA(
+    torch::Tensor coo_row, torch::Tensor coo_col, torch::Tensor input,
+    torch::Tensor edata, torch::Tensor output, torch::Tensor coo_offset,
+    torch::Tensor input_offset, torch::Tensor output_offset);
+
+void UAddVCUDA(
+    torch::Tensor coo_row, torch::Tensor coo_col, torch::Tensor lhs,
+    torch::Tensor rhs, torch::Tensor output, torch::Tensor coo_offset,
+    torch::Tensor lhs_offset, torch::Tensor rhs_offset);
+
+void UMulVCUDA(
+    torch::Tensor coo_row, torch::Tensor coo_col, torch::Tensor lhs,
+    torch::Tensor rhs, torch::Tensor output, torch::Tensor coo_offset,
+    torch::Tensor lhs_offset, torch::Tensor rhs_offset);
 }  // namespace npc
 
 #endif

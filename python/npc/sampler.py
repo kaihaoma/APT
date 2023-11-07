@@ -65,7 +65,7 @@ def tensor_relabel_csc(seeds, neighbors) -> Tuple[torch.Tensor, torch.Tensor]:
     return torch.ops.npc.relabel_csc(seeds, neighbors)
 
 
-def create_dgl_block(seeds, neighbors, fanout):
+def create_dgl_block(seeds, neighbors, fanout, return_coo=False):
     unique_frontier, indices = tensor_relabel_csc(seeds, neighbors)
     coo_col = torch.arange(0, seeds.numel(), device=indices.device).repeat_interleave(fanout)
 
@@ -77,7 +77,10 @@ def create_dgl_block(seeds, neighbors, fanout):
     )
     block.srcdata["_ID"] = unique_frontier
 
-    return block
+    if return_coo:
+        return block, (indices, coo_col)
+    else:
+        return block
 
 
 # Loader
@@ -173,7 +176,6 @@ class MixedPSNeighborSampler(object):
             print(f"[Note]debug:{self.debug_flag}\t graph:{self.debug_graph}\t min_vids:{self.debug_min_vids}\t #nodes:{self.num_nodes}")
 
     def sample(self, graph, seeds):
-        # torch.cuda.nvtx.range_push("sample")
         output_nodes = seeds
         blocks = []
 
@@ -245,7 +247,10 @@ class MixedPSNeighborSampler(object):
                     seeds = torch.cat((seeds, unique_src))
 
                 elif self.system == "MP":
-                    unique_frontier, coo_row = tensor_relabel_csc(seeds, neighbors)
+                    block, (coo_row, coo_col) = create_dgl_block(seeds, neighbors, fanout, True)
+                    unique_frontier = block.srcdata["_ID"]
+                    send_frontier_size = torch.tensor([unique_frontier.numel()])
+
                     (
                         all_frontier,
                         all_coo_row,
@@ -255,17 +260,14 @@ class MixedPSNeighborSampler(object):
                         recv_coo_size,
                     ) = mp_sample_shuffle(seeds, unique_frontier, coo_row)
                     all_coo_col = torch.cat([torch.arange(0, i, device=all_coo_row.device).repeat_interleave(fanout) for i in recv_size])
-                    blocks.insert(0, (all_coo_row, all_coo_col, recv_frontier_size, recv_coo_size, recv_size))
+                    blocks.insert(0, (all_coo_row, all_coo_col, send_frontier_size, recv_frontier_size, recv_coo_size, recv_size, block))
                     sampling_result = (send_size, recv_size)
                     seeds = all_frontier
 
             if layer_id != self.num_layers - 1 or self.system not in ("SP", "MP"):
-                # torch.cuda.nvtx.range_push("construct block")
                 block = create_dgl_block(seeds, neighbors, fanout)
                 seeds = block.srcdata[dgl.NID]
                 blocks.insert(0, block)
-                # torch.cuda.nvtx.range_pop()
 
         input_nodes = seeds
-        # torch.cuda.nvtx.range_pop()
         return (input_nodes, output_nodes, blocks) + sampling_result
