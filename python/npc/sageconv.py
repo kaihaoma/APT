@@ -3,6 +3,83 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from typing import Tuple
+import dgl.function as fn
+
+from .ops import SPFeatureShuffle
+
+
+class SPSAGEConv(nn.Module):
+    def __init__(
+        self,
+        in_feats,
+        out_feats,
+        aggregator_type,
+        remote_stream=None,
+        feat_drop=0.0,
+        bias=True,
+        norm=None,
+        activation=None,
+    ):
+        super(SPSAGEConv, self).__init__()
+
+        self._in_src_feats = in_feats
+        self._in_dst_feats = in_feats
+        self._out_feats = out_feats
+        self._aggre_type = aggregator_type
+        self._remote_stream = remote_stream
+        self.norm = norm
+        self.feat_drop = nn.Dropout(feat_drop)
+        self.activation = activation
+
+        self.fc_neigh = nn.Linear(self._in_src_feats, out_feats, bias=False)
+        self.fc_self = nn.Linear(self._in_dst_feats, out_feats, bias=bias)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        gain = nn.init.calculate_gain("relu")
+        nn.init.xavier_uniform_(self.fc_self.weight, gain=gain)
+        nn.init.xavier_uniform_(self.fc_neigh.weight, gain=gain)
+
+    def forward(self, blocks, feat, fsi):
+        # block2 fwd (VirtualNode, ori_neighbor)
+        graph = blocks[0]
+        num_recv_dst = fsi.num_recv_dst
+        with graph.local_scope():
+            feat_dst = feat[:num_recv_dst]
+            h_dst = self.fc_self(feat_dst)
+            # feat_dst = self.fc_self(feat[:num_dst])
+            feat_src = self.feat_drop(feat[num_recv_dst:])
+            msg_fn = fn.copy_u("h", "m")
+            # Message Passing
+            # print(f"[Note]feat_dst: {feat_dst.shape}, feat_src: {feat_src.shape}\t num_recv_dst: {num_recv_dst}\t send_sizes:{fsi.send_sizes}\t recv_sizes:{fsi.recv_sizes}")
+            graph.srcdata["h"] = self.fc_neigh(feat_src)
+            graph.update_all(msg_fn, fn.mean("m", "neigh"))
+            h_vir = graph.dstdata["neigh"]
+
+        # shuffle_vir, shuffle_dst = npc.SPFeatureShuffle.apply(fsi, h_vir, h_dst)
+        shuffle_feat = SPFeatureShuffle.apply(fsi, torch.cat([h_dst, h_vir], dim=0))
+        # block1 fwd, (ori_node, VirtualNode)
+        graph = blocks[1]
+        num_send_dst = fsi.num_send_dst
+        with graph.local_scope():
+            # graph.srcdata["h"] = shuffle_vir
+            graph.srcdata["h"] = shuffle_feat[num_send_dst:]
+            # Message Passing
+            msg_fn = fn.copy_u("h", "m")
+            graph.update_all(msg_fn, fn.mean("m", "neigh"))
+            h_neigh = graph.dstdata["neigh"]
+
+            # h_self = shuffle_dst
+            h_self = shuffle_feat[:num_send_dst]
+            rst = h_self + h_neigh
+
+            # activation
+            if self.activation is not None:
+                rst = self.activation(rst)
+            # normalization
+            if self.norm is not None:
+                rst = self.norm(rst)
+            return rst
 
 
 class Aggregate(torch.autograd.Function):
@@ -51,54 +128,11 @@ class MPSAGEConv(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        r"""
-
-        Description
-        -----------
-        Reinitialize learnable parameters.
-
-        Note
-        ----
-        The linear weights :math:`W^{(l)}` are initialized using Glorot uniform initialization.
-        The LSTM module is using xavier initialization method for its weights.
-        """
         gain = nn.init.calculate_gain("relu")
-        if self._aggre_type == "pool":
-            nn.init.xavier_uniform_(self.fc_pool.weight, gain=gain)
-        if self._aggre_type == "lstm":
-            self.lstm.reset_parameters()
-        if self._aggre_type != "gcn":
-            nn.init.xavier_uniform_(self.fc_self.weight, gain=gain)
+        nn.init.xavier_uniform_(self.fc_self.weight, gain=gain)
         nn.init.xavier_uniform_(self.fc_neigh.weight, gain=gain)
 
     def forward(self, graph, feat, edge_weight=None):
-        r"""
-
-        Description
-        -----------
-        Compute GraphSAGE layer.
-
-        Parameters
-        ----------
-        graph : DGLGraph
-            The graph.
-        feat : torch.Tensor or pair of torch.Tensor
-            If a torch.Tensor is given, it represents the input feature of shape
-            :math:`(N, D_{in})`
-            where :math:`D_{in}` is size of input feature, :math:`N` is the number of nodes.
-            If a pair of torch.Tensor is given, the pair must contain two tensors of shape
-            :math:`(N_{in}, D_{in_{src}})` and :math:`(N_{out}, D_{in_{dst}})`.
-        edge_weight : torch.Tensor, optional
-            Optional tensor on the edge. If given, the convolution will weight
-            with regard to the message.
-
-        Returns
-        -------
-        torch.Tensor
-            The output feature of shape :math:`(N_{dst}, D_{out})`
-            where :math:`N_{dst}` is the number of destination nodes in the input graph,
-            :math:`D_{out}` is the size of the output feature.
-        """
         (
             all_coo_row,
             all_coo_col,

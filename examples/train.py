@@ -4,7 +4,8 @@ import dgl
 import npc
 import torch
 import time
-from model import NPCSAGE, DGLSAGE, MPSAGE, SPSAGE
+from sage_model import *
+from gcn_model import *
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn.functional as F
@@ -144,12 +145,12 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
             activation=torch.relu,
         ).to(device)
     elif args.system == "SP":
-        training_model = SPSAGE(
+        training_model = SPGCN(
             args=args,
             activation=torch.relu,
         ).to(device)
     elif args.system == "MP":
-        training_model = MPSAGE(
+        training_model = MPGCN(
             args=args,
             activation=torch.relu,
         )

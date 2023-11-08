@@ -1,12 +1,10 @@
 import torch
 import torch.nn as nn
-import dgl.nn as dglnn
+import dgl.nn.pytorch as dglnn
 import npc
 import time
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
-
-from conv import EXPSAGEConv
 
 
 class NPCSAGE(nn.Module):
@@ -145,7 +143,7 @@ class SPSAGE(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(EXPSAGEConv(in_feats, n_hidden, "mean"))
+            self.layers.append(npc.EXPSAGEConv(in_feats, n_hidden, "mean"))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.SAGEConv(n_hidden, n_hidden, "mean"))
             self.layers.append(dglnn.SAGEConv(n_hidden, n_classes, "mean"))
