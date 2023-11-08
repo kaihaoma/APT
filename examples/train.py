@@ -4,7 +4,8 @@ import dgl
 import npc
 import torch
 import time
-from model import NPCSAGE, DGLSAGE, MPSAGE, SPSAGE
+from model import *
+from gat_model import *
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn.functional as F
@@ -96,6 +97,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
             world_size=world_size,
             fanouts=args.fan_out,
             system=args.system,
+            model=args.model,
             num_total_nodes=min_vids[-1],
             debug_info=(debug_graph, debug_min_vids, num_nodes) if args.debug else None,
         )
@@ -130,31 +132,58 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         f"[Note]Rank#{rank} Done define sampler & dataloader, #batches:{num_batches_per_epoch}\n {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}"
     )
 
-    num_layers = len(args.fan_out)
     # define model
-
-    if args.system == "DP":
-        training_model = DGLSAGE(
-            args=args,
-            activation=torch.relu,
-        ).to(device)
-    elif args.system == "NP":
-        training_model = NPCSAGE(
-            args=args,
-            activation=torch.relu,
-        ).to(device)
-    elif args.system == "SP":
-        training_model = SPSAGE(
-            args=args,
-            activation=torch.relu,
-        ).to(device)
-    elif args.system == "MP":
-        training_model = MPSAGE(
-            args=args,
-            activation=torch.relu,
-        )
-    else:
-        raise ValueError(f"Invalid system:{args.system}")
+    if args.model == "SAGE":
+        if args.system == "DP":
+            training_model = DGLSAGE(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "NP":
+            training_model = NPCSAGE(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "SP":
+            training_model = SPSAGE(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "MP":
+            training_model = MPSAGE(
+                args=args,
+                activation=torch.relu,
+            )
+        else:
+            raise ValueError(f"Invalid system:{args.system}")
+    elif args.model == "GAT":
+        heads = [4] * len(args.fan_out)
+        if args.system == "DP":
+            training_model = DGLGAT(
+                args=args,
+                heads=heads,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "NP":
+            training_model = NPCGAT(
+                args=args,
+                heads=heads,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "SP":
+            training_model = SPGAT(
+                args=args,
+                heads=heads,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "MP":
+            training_model = MPGAT(
+                args=args,
+                heads=heads,
+                activation=torch.relu,
+            )
+        else:
+            raise ValueError(f"Invalid system:{args.system}")
 
     print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
 

@@ -93,6 +93,14 @@ std::vector<torch::Tensor> SPSampleAndShuffle(
   return {vir_src, ori_src, send_sizes, recv_sizes};
 }
 
+std::vector<torch::Tensor> SPSampleShuffleSrc(torch::Tensor unique_src) {
+  torch::Tensor shuffled_src, permutation, recv_offset, dev_offset;
+  std::tie(shuffled_src, permutation, recv_offset, dev_offset) =
+      ShuffleSeeds(unique_src);
+
+  return {shuffled_src, permutation, recv_offset, dev_offset};
+}
+
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 ShuffleSeeds(torch::Tensor seeds) {
   auto* state = NPCState::Global();

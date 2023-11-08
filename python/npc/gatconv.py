@@ -4,77 +4,10 @@ from torch import nn
 from torch.nn import functional as F
 from typing import Tuple
 import dgl.function as fn
-from dgl._sparse_ops import _gsddmm, _gspmm
 from dgl.ops import edge_softmax
 import numpy as np
 
-from .ops import SPFeatureShuffle, MPFeatureShuffle, MPFeatureShuffleInfo
-
-
-class Identity(nn.Module):
-    """A placeholder identity operator that is argument-insensitive.
-    (Identity has already been supported by PyTorch 1.2, we will directly
-    import torch.nn.Identity in the future)
-    """
-
-    def __init__(self):
-        super(Identity, self).__init__()
-
-    def forward(self, x):
-        """Return input"""
-        return x
-
-
-class DistributedEdgeSoftmax(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, gidx, score, fsi):
-        """Forward function.
-
-        Pseudo-code:
-
-        .. code:: python
-
-            score = dgl.EData(g, score)
-            score_max = score.dst_max()  # of type dgl.NData
-            score = score - score_max  # edge_sub_dst, ret dgl.EData
-            score_sum = score.dst_sum()  # of type dgl.NData
-            out = score / score_sum    # edge_div_dst, ret dgl.EData
-            return out.data
-        """
-        score_max = _gspmm(gidx, "copy_rhs", "max", None, score)[0]
-        score = torch.exp(_gsddmm(gidx, "sub", score, score_max, "e", "v"))
-        score_sum = _gspmm(gidx, "copy_rhs", "sum", None, score)[0]
-        out = _gsddmm(gidx, "div", score, score_sum, "e", "v")
-        ctx.backward_cache = gidx
-        ctx.save_for_backward(out)
-        return out
-
-    @staticmethod
-    def backward(ctx, grad_out):
-        """Backward function.
-
-        Pseudo-code:
-
-        .. code:: python
-
-            g, out = ctx.backward_cache
-            grad_out = dgl.EData(g, grad_out)
-            out = dgl.EData(g, out)
-            sds = out * grad_out  # type dgl.EData
-            sds_sum = sds.dst_sum()  # type dgl.NData
-            grad_score = sds - out * sds_sum  # multiple expressions
-            return grad_score.data
-        """
-        gidx = ctx.backward_cache
-        (out,) = ctx.saved_tensors
-        sds = out * grad_out
-        accum = _gspmm(gidx, "copy_rhs", "sum", None, sds)[0]
-        grad_score = sds - _gsddmm(gidx, "mul", out, accum, "e", "v")
-        return None, grad_score, None
-
-
-def distribued_edge_softmax(graph, logits, fsi):
-    return DistributedEdgeSoftmax.apply(graph._graph, logits, fsi)
+from .ops import SPFeatureShuffleGAT, MPFeatureShuffle, MPFeatureShuffleInfo
 
 
 class SPGATConv(nn.Module):
@@ -136,18 +69,21 @@ class SPGATConv(nn.Module):
             if self.res_fc.bias is not None:
                 nn.init.constant_(self.res_fc.bias, 0)
 
-    def forward(self, blocks, feat, fsi):
+    def forward(self, graph, feat, fsi):
         # block2 fwd (VirtualNode, ori_neighbor)
-        graph = blocks[0]
         num_dst = fsi.num_dst
-        with graph.local_scope():
-            src_prefix_shape = dst_prefix_shape = feat.shape[:-1]
-            h_src = self.feat_drop(feat)
-            h_dst = h_src[:num_dst]
-            feat_src = self.fc(h_src).view(*src_prefix_shape, self._num_heads, self._out_feats)
-            feat_dst = feat_src[:num_dst]
-            dst_prefix_shape = (graph.number_of_dst_nodes(),) + dst_prefix_shape[1:]
+        src_prefix_shape = dst_prefix_shape = feat.shape[:-1]
+        h_src = self.feat_drop(feat)
+        feat_src = self.fc(h_src).view(*src_prefix_shape, self._num_heads, self._out_feats)
+        feat_dst = feat_src[:num_dst]
+        feat_src = feat_src[num_dst:]
 
+        fsi.feat_dim = self._num_heads * self._out_feats
+        feat_src = SPFeatureShuffleGAT.apply(fsi, feat_src)
+
+        # block1 fwd, (ori_node, VirtualNode)
+        dst_prefix_shape = (graph.number_of_dst_nodes(),) + dst_prefix_shape[1:]
+        with graph.local_scope():
             el = (feat_src * self.attn_l).sum(dim=-1).unsqueeze(-1)
             er = (feat_dst * self.attn_r).sum(dim=-1).unsqueeze(-1)
             graph.srcdata.update({"ft": feat_src, "el": el})
@@ -156,21 +92,10 @@ class SPGATConv(nn.Module):
             graph.apply_edges(fn.u_add_v("el", "er", "e"))
             e = self.leaky_relu(graph.edata.pop("e"))
             # compute softmax
-            graph.edata["a"] = self.attn_drop(distribued_edge_softmax(graph, e, fsi))
+            graph.edata["a"] = self.attn_drop(edge_softmax(graph, e))
             # message passing
             graph.update_all(fn.u_mul_e("ft", "a", "m"), fn.sum("m", "ft"))
-            h_vir = graph.dstdata["ft"]
-
-        fsi.feat_dim = self._num_heads * self._out_feats
-        shuffle_feat = SPFeatureShuffle.apply(fsi, h_vir)
-
-        # block1 fwd, (ori_node, VirtualNode)
-        graph = blocks[1]
-        with graph.local_scope():
-            graph.srcdata["h"] = shuffle_feat
-            # Message Passing
-            graph.update_all(fn.copy_u("h", "m"), fn.sum("m", "neigh"))
-            rst = graph.dstdata["neigh"]
+            rst = graph.dstdata["ft"]
             # residual
             if self.res_fc is not None:
                 raise NotImplementedError

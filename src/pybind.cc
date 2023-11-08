@@ -32,6 +32,7 @@ TORCH_LIBRARY(npc, m) {
       .def("src_to_vir", &SrcToVir)
       .def("np_sample_and_shuffle", &NPSampleAndShuffle)
       .def("sp_sample_and_shuffle", &SPSampleAndShuffle)
+      .def("sp_sample_shuffle_src", &SPSampleShuffleSrc)
       .def("mp_sample_shuffle", &MPSampleShuffle)
       .def("feat_shuffle", &FeatShuffle)
       .def("sp_feat_shuffle", &SPFeatShuffle)

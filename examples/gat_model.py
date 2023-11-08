@@ -331,7 +331,7 @@ class MPGAT(nn.Module):
                 dropout=dropout,
             )
             self.ddp_modules = DDP(
-                DGLGAT(ddp_config, heads, F.elu).to(self.device),
+                DGLGAT(ddp_config, heads[1:], F.elu).to(self.device),
                 device_ids=[self.device],
                 output_device=self.device,
             )
