@@ -131,31 +131,53 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         f"[Note]Rank#{rank} Done define sampler & dataloader, #batches:{num_batches_per_epoch}\n {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}"
     )
 
-    num_layers = len(args.fan_out)
     # define model
-
-    if args.system == "DP":
-        training_model = DGLSAGE(
-            args=args,
-            activation=torch.relu,
-        ).to(device)
-    elif args.system == "NP":
-        training_model = NPCSAGE(
-            args=args,
-            activation=torch.relu,
-        ).to(device)
-    elif args.system == "SP":
-        training_model = SPGCN(
-            args=args,
-            activation=torch.relu,
-        ).to(device)
-    elif args.system == "MP":
-        training_model = MPGCN(
-            args=args,
-            activation=torch.relu,
-        )
-    else:
-        raise ValueError(f"Invalid system:{args.system}")
+    if args.model == "SAGE":
+        if args.system == "DP":
+            training_model = DGLSAGE(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "NP":
+            training_model = NPCSAGE(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "SP":
+            training_model = SPSAGE(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "MP":
+            training_model = MPSAGE(
+                args=args,
+                activation=torch.relu,
+            )
+        else:
+            raise ValueError(f"Invalid system:{args.system}")
+    elif args.model == "GCN":
+        if args.system == "DP":
+            training_model = DGLGCN(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "NP":
+            training_model = NPCGCN(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "SP":
+            training_model = SPGCN(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "MP":
+            training_model = MPGCN(
+                args=args,
+                activation=torch.relu,
+            )
+        else:
+            raise ValueError(f"Invalid system:{args.system}")
 
     print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
 

@@ -173,7 +173,6 @@ class MixedPSNeighborSampler(object):
             print(f"[Note]debug:{self.debug_flag}\t graph:{self.debug_graph}\t min_vids:{self.debug_min_vids}\t #nodes:{self.num_nodes}")
 
     def sample(self, graph, seeds):
-        # torch.cuda.nvtx.range_push("sample")
         output_nodes = seeds
         blocks = []
 
@@ -260,12 +259,9 @@ class MixedPSNeighborSampler(object):
                     seeds = all_frontier
 
             if layer_id != self.num_layers - 1 or self.system not in ("SP", "MP"):
-                # torch.cuda.nvtx.range_push("construct block")
                 block = create_dgl_block(seeds, neighbors, fanout)
                 seeds = block.srcdata[dgl.NID]
                 blocks.insert(0, block)
-                # torch.cuda.nvtx.range_pop()
 
         input_nodes = seeds
-        # torch.cuda.nvtx.range_pop()
         return (input_nodes, output_nodes, blocks) + sampling_result

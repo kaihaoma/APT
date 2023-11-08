@@ -43,34 +43,27 @@ class SPSAGEConv(nn.Module):
     def forward(self, blocks, feat, fsi):
         # block2 fwd (VirtualNode, ori_neighbor)
         graph = blocks[0]
-        num_recv_dst = fsi.num_recv_dst
+        num_dst = fsi.num_dst
+        feat_all = self.feat_drop(feat)
+        h_dst = self.fc_self(feat_all[:num_dst])
+        feat_src = feat_all[num_dst:]
         with graph.local_scope():
-            feat_dst = feat[:num_recv_dst]
-            h_dst = self.fc_self(feat_dst)
-            # feat_dst = self.fc_self(feat[:num_dst])
-            feat_src = self.feat_drop(feat[num_recv_dst:])
-            msg_fn = fn.copy_u("h", "m")
             # Message Passing
-            # print(f"[Note]feat_dst: {feat_dst.shape}, feat_src: {feat_src.shape}\t num_recv_dst: {num_recv_dst}\t send_sizes:{fsi.send_sizes}\t recv_sizes:{fsi.recv_sizes}")
             graph.srcdata["h"] = self.fc_neigh(feat_src)
-            graph.update_all(msg_fn, fn.mean("m", "neigh"))
+            graph.update_all(fn.copy_u("h", "m"), fn.mean("m", "neigh"))
             h_vir = graph.dstdata["neigh"]
 
-        # shuffle_vir, shuffle_dst = npc.SPFeatureShuffle.apply(fsi, h_vir, h_dst)
-        shuffle_feat = SPFeatureShuffle.apply(fsi, torch.cat([h_dst, h_vir], dim=0))
+        shuffle_feat = SPFeatureShuffle.apply(fsi, h_vir)
+
         # block1 fwd, (ori_node, VirtualNode)
         graph = blocks[1]
-        num_send_dst = fsi.num_send_dst
         with graph.local_scope():
-            # graph.srcdata["h"] = shuffle_vir
-            graph.srcdata["h"] = shuffle_feat[num_send_dst:]
+            graph.srcdata["h"] = shuffle_feat
             # Message Passing
-            msg_fn = fn.copy_u("h", "m")
-            graph.update_all(msg_fn, fn.mean("m", "neigh"))
+            graph.update_all(fn.copy_u("h", "m"), fn.mean("m", "neigh"))
             h_neigh = graph.dstdata["neigh"]
 
-            # h_self = shuffle_dst
-            h_self = shuffle_feat[:num_send_dst]
+            h_self = h_dst
             rst = h_self + h_neigh
 
             # activation

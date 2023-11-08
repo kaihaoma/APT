@@ -40,7 +40,7 @@ class NPCGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(dglnn.GraphConv(in_feats, n_hidden))
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm="none"))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
@@ -84,7 +84,7 @@ class DGLGCN(nn.Module):
         )
 
     def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout):
-        print(f"[Note]DGL SAGE: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
+        print(f"[Note]DGL GCN: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
         self.in_feats = in_feats
@@ -92,7 +92,7 @@ class DGLGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(dglnn.GraphConv(in_feats, n_hidden))
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm="none"))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
@@ -143,7 +143,7 @@ class SPGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(npc.SPGraphConv(in_feats, n_hidden))
+            self.layers.append(npc.SPGraphConv(in_feats, n_hidden, norm="none"))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
@@ -227,6 +227,7 @@ class MPGCN(nn.Module):
             self.mp_layers = npc.MPGraphConv(
                 self.in_feats_list[self.rank],
                 self.n_hidden,
+                norm="none",
             ).to(self.device)
             # ddp
             ddp_config = SimpleConfig(

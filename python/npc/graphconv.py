@@ -52,10 +52,23 @@ class SPGraphConv(nn.Module):
     def forward(self, blocks, feat, fsi):
         # block2 fwd (VirtualNode, ori_neighbor)
         graph = blocks[0]
-        num_recv_dst = fsi.num_recv_dst
+        num_dst = fsi.num_dst
+        feat_dst = feat[:num_dst]
+        feat_src = feat[num_dst:]
         with graph.local_scope():
-            feat_dst = feat[:num_recv_dst]
-            feat_src = feat[num_recv_dst:]
+            if not self._allow_zero_in_degree:
+                if (graph.in_degrees() == 0).any():
+                    raise (
+                        "There are 0-in-degree nodes in the graph, "
+                        "output for those nodes will be invalid. "
+                        "This is harmful for some applications, "
+                        "causing silent performance regression. "
+                        "Adding self-loop on the input graph by "
+                        "calling `g = dgl.add_self_loop(g)` will resolve "
+                        "the issue. Setting ``allow_zero_in_degree`` "
+                        "to be `True` when constructing this module will "
+                        "suppress the check and let the code run."
+                    )
             if self._norm in ["left", "both"]:
                 degs = graph.out_degrees().to(feat_src).clamp(min=1)
                 if self._norm == "both":
@@ -65,31 +78,43 @@ class SPGraphConv(nn.Module):
                 shp = norm.shape + (1,) * (feat_src.dim() - 1)
                 norm = torch.reshape(norm, shp)
                 feat_src = feat_src * norm
+
             # mult W first to reduce the feature size for aggregation.
-            h_dst = torch.matmul(feat_dst, self.weight)
             feat_src = torch.matmul(feat_src, self.weight)
             graph.srcdata["h"] = feat_src
             graph.update_all(fn.copy_u("h", "m"), fn.sum(msg="m", out="h"))
             h_vir = graph.dstdata["h"]
 
             if self._norm in ["right", "both"]:
-                degs = graph.in_degrees().to(feat_dst).clamp(min=1)
+                degs = graph.in_degrees().to(h_vir).clamp(min=1)
                 if self._norm == "both":
                     norm = torch.pow(degs, -0.5)
                 else:
                     norm = 1.0 / degs
-                shp = norm.shape + (1,) * (feat_dst.dim() - 1)
+                shp = norm.shape + (1,) * (h_vir.dim() - 1)
                 norm = torch.reshape(norm, shp)
                 h_vir = h_vir * norm
 
-        # shuffle_vir, shuffle_dst = npc.SPFeatureShuffle.apply(fsi, h_vir, h_dst)
-        shuffle_feat = SPFeatureShuffle.apply(fsi, torch.cat([h_dst, h_vir], dim=0))
+        shuffle_feat = SPFeatureShuffle.apply(fsi, h_vir)
+
         # block1 fwd, (ori_node, VirtualNode)
         graph = blocks[1]
-        num_send_dst = fsi.num_send_dst
         with graph.local_scope():
-            graph.srcdata["h"] = shuffle_feat[num_send_dst:]
-            feat_dst = shuffle_feat[:num_send_dst]
+            if not self._allow_zero_in_degree:
+                if (graph.in_degrees() == 0).any():
+                    raise (
+                        "There are 0-in-degree nodes in the graph, "
+                        "output for those nodes will be invalid. "
+                        "This is harmful for some applications, "
+                        "causing silent performance regression. "
+                        "Adding self-loop on the input graph by "
+                        "calling `g = dgl.add_self_loop(g)` will resolve "
+                        "the issue. Setting ``allow_zero_in_degree`` "
+                        "to be `True` when constructing this module will "
+                        "suppress the check and let the code run."
+                    )
+
+            graph.srcdata["h"] = shuffle_feat
             # Message Passing
             graph.update_all(fn.copy_u("h", "m"), fn.sum("m", "h"))
             rst = graph.dstdata["h"]

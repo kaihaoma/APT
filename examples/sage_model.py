@@ -143,7 +143,7 @@ class SPSAGE(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(npc.EXPSAGEConv(in_feats, n_hidden, "mean"))
+            self.layers.append(npc.SPSAGEConv(in_feats, n_hidden, "mean"))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.SAGEConv(n_hidden, n_hidden, "mean"))
             self.layers.append(dglnn.SAGEConv(n_hidden, n_classes, "mean"))

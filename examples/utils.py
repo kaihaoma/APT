@@ -273,7 +273,7 @@ def init_args(args=None) -> argparse.Namespace:
     parser.add_argument("--logs_dir", type=str, default="./logs/time.csv", help="log file dir")
     parser.add_argument("--machine", type=str, default="4*T4 GPUs", help="machine config")
     parser.add_argument("--dataset", type=str, default="ogbn-products", help="dataset name")
-    parser.add_argument("--model", type=str, default="graphsage", help="model name")
+    parser.add_argument("--model", type=str, default="SAGE", choices=["SAGE", "GCN", "GAT"], help="model name")
     parser.add_argument("--system", type=str, default="NP", choices=["DP", "NP", "SP", "MP"])
     # ---For cost model of adj. & node feat. ---
     parser.add_argument(
