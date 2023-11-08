@@ -32,12 +32,12 @@ class SPSAGEConv(nn.Module):
         self.activation = activation
 
         self.fc_neigh = nn.Linear(self._in_src_feats, out_feats, bias=False)
-        self.fc_self = nn.Linear(self._in_dst_feats, out_feats, bias=bias)
+        # self.fc_self = nn.Linear(self._in_dst_feats, out_feats, bias=bias)
         self.reset_parameters()
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain("relu")
-        nn.init.xavier_uniform_(self.fc_self.weight, gain=gain)
+        # nn.init.xavier_uniform_(self.fc_self.weight, gain=gain)
         nn.init.xavier_uniform_(self.fc_neigh.weight, gain=gain)
 
     def forward(self, blocks, feat, fsi):
@@ -45,7 +45,7 @@ class SPSAGEConv(nn.Module):
         graph = blocks[0]
         num_dst = fsi.num_dst
         feat_all = self.feat_drop(feat)
-        h_dst = self.fc_self(feat_all[:num_dst])
+        # h_dst = self.fc_self(feat_all[:num_dst])
         feat_src = feat_all[num_dst:]
         with graph.local_scope():
             # Message Passing
@@ -63,8 +63,9 @@ class SPSAGEConv(nn.Module):
             graph.update_all(fn.copy_u("h", "m"), fn.mean("m", "neigh"))
             h_neigh = graph.dstdata["neigh"]
 
-            h_self = h_dst
-            rst = h_self + h_neigh
+            # h_self = h_dst
+            # rst = h_self + h_neigh
+            rst = h_neigh
 
             # activation
             if self.activation is not None:
@@ -137,12 +138,8 @@ class MPSAGEConv(nn.Module):
         frontier_offset = torch.cat([torch.tensor([0], device=recv_frontier_size.device), torch.cumsum(recv_frontier_size, dim=0)])
         coo_offset = torch.cat([torch.tensor([0], device=recv_coo_size.device), torch.cumsum(recv_coo_size, dim=0)])
         seed_offset = torch.cat([torch.tensor([0], device=recv_seed_size.device), torch.cumsum(recv_seed_size, dim=0)])
-        if isinstance(feat, tuple):
-            feat_src = self.feat_drop(feat[0])
-            feat_dst = self.feat_drop(feat[1])
-        else:
-            feat_src = self.feat_drop(feat)
-            feat_dst = torch.cat([feat_src[frontier_offset[i] : frontier_offset[i] + recv_seed_size[i]] for i in range(recv_seed_size.numel())])
+        feat_src = self.feat_drop(feat)
+        feat_dst = torch.cat([feat_src[frontier_offset[i] : frontier_offset[i] + recv_seed_size[i]] for i in range(recv_seed_size.numel())])
 
         h_self = feat_dst
 

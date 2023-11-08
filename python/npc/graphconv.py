@@ -205,12 +205,7 @@ class MPGraphConv(nn.Module):
         frontier_offset = torch.cat([torch.tensor([0], device=recv_frontier_size.device), torch.cumsum(recv_frontier_size, dim=0)])
         coo_offset = torch.cat([torch.tensor([0], device=recv_coo_size.device), torch.cumsum(recv_coo_size, dim=0)])
         seed_offset = torch.cat([torch.tensor([0], device=recv_seed_size.device), torch.cumsum(recv_seed_size, dim=0)])
-        if isinstance(feat, tuple):
-            feat_src = feat[0]
-            # feat_dst = feat[1]
-        else:
-            feat_src = feat
-            # feat_dst = torch.cat([feat_src[frontier_offset[i] : frontier_offset[i] + recv_seed_size[i]] for i in range(recv_seed_size.numel())])
+        feat_src = feat
 
         if self._norm in ["left", "both"]:
             if self._norm == "both":
