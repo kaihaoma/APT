@@ -70,6 +70,20 @@ class SPGATConv(nn.Module):
                 nn.init.constant_(self.res_fc.bias, 0)
 
     def forward(self, graph, feat, fsi):
+        with graph.local_scope():
+            if not self._allow_zero_in_degree:
+                if (graph.in_degrees() == 0).any():
+                    raise (
+                        "There are 0-in-degree nodes in the graph, "
+                        "output for those nodes will be invalid. "
+                        "This is harmful for some applications, "
+                        "causing silent performance regression. "
+                        "Adding self-loop on the input graph by "
+                        "calling `g = dgl.add_self_loop(g)` will resolve "
+                        "the issue. Setting ``allow_zero_in_degree`` "
+                        "to be `True` when constructing this module will "
+                        "suppress the check and let the code run."
+                    )
         # block2 fwd (VirtualNode, ori_neighbor)
         num_dst = fsi.num_dst
         src_prefix_shape = dst_prefix_shape = feat.shape[:-1]
@@ -107,7 +121,6 @@ class SPGATConv(nn.Module):
             # activation
             if self.activation:
                 rst = self.activation(rst)
-            print(rst.shape)
             return rst
 
 
@@ -170,26 +183,31 @@ class MPGATConv(nn.Module):
             if self.res_fc.bias is not None:
                 nn.init.constant_(self.res_fc.bias, 0)
 
-    def forward(self, graph_tuple, feat, fsi: MPFeatureShuffleInfo, edge_weight=None):
-        (
-            all_coo_row,
-            all_coo_col,
-            send_frontier_size,
-            recv_frontier_size,
-            recv_coo_size,
-            recv_seed_size,
-            graph,
-        ) = graph_tuple
-        src_prefix_shape = dst_prefix_shape = feat.shape[:-1]
+    def forward(self, graph, feat, fsi: MPFeatureShuffleInfo, edge_weight=None):
+        with graph.local_scope():
+            if not self._allow_zero_in_degree:
+                if (graph.in_degrees() == 0).any():
+                    raise (
+                        "There are 0-in-degree nodes in the graph, "
+                        "output for those nodes will be invalid. "
+                        "This is harmful for some applications, "
+                        "causing silent performance regression. "
+                        "Adding self-loop on the input graph by "
+                        "calling `g = dgl.add_self_loop(g)` will resolve "
+                        "the issue. Setting ``allow_zero_in_degree`` "
+                        "to be `True` when constructing this module will "
+                        "suppress the check and let the code run."
+                    )
         h_src = self.feat_drop(feat)
-        feat_src = self.fc(h_src).view(*src_prefix_shape, self._num_heads, self._out_feats)
+        feat_src = self.fc(h_src)
 
         fsi.feat_dim = self._num_heads * self._out_feats
-        fsi.send_size = send_frontier_size.to("cpu")
-        fsi.recv_size = recv_frontier_size.to("cpu")
         feat_src = MPFeatureShuffle.apply(fsi, feat_src)
-        feat_dst = feat_src[: graph.number_of_dst_nodes()]
+
+        src_prefix_shape = dst_prefix_shape = feat_src.shape[:-1]
         dst_prefix_shape = (graph.number_of_dst_nodes(),) + dst_prefix_shape[1:]
+        feat_src = feat_src.view(*src_prefix_shape, self._num_heads, self._out_feats)
+        feat_dst = feat_src[: graph.number_of_dst_nodes()]
 
         with graph.local_scope():
             el = (feat_src * self.attn_l).sum(dim=-1).unsqueeze(-1)

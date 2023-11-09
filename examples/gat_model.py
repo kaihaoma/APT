@@ -254,6 +254,7 @@ class SPGAT(nn.Module):
         h = input_feats
         # layer 0
         h = self.layers[0](blocks[0], h, fsi)
+        h = h.flatten(1) if self.n_layers > 1 else h.mean(1)
         # layer 1~n-1
         for l, (layer, block) in enumerate(zip(self.layers[1:], blocks[1:])):
             h = layer(block, h)
@@ -357,5 +358,4 @@ class MPGAT(nn.Module):
         h = h.flatten(1)
 
         h = self.ddp_modules((blocks[1:], h))
-        h = h.mean(1)
         return h
