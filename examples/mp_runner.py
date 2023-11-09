@@ -7,10 +7,11 @@ import importlib
 
 def get_pre_defined_args(tag_prefix):
     num_try_times = 1
-    # cache_memory_in_gbs = [1]
-    cache_memory_in_gbs = list(range(6))
-    system = ["DP", "NP", "SP", "MP"]
-    num_localnode_feats_in_workers = list(range(4, 8))
+    cache_memory_in_gbs = [1]
+    # cache_memory_in_gbs = list(range(6))
+    system = ["SP"]
+    # num_localnode_feats_in_workers = list(range(4, 8))
+    num_localnode_feats_in_workers = [-1]
     # generate args
 
     for try_times in range(num_try_times):
@@ -59,8 +60,8 @@ if __name__ == "__main__":
     print(f"[Note]procs:{nproc}\t world_size:{world_size}\t ranks:{ranks}\t local_ranks:{local_ranks}")
 
     train_module = importlib.import_module("train")
-    # for inputs in get_pre_defined_args(args.tag):
-    for inputs in get_user_input(args.tag):
+    for inputs in get_pre_defined_args(args.tag):
+        # for inputs in get_user_input(args.tag):
         for key, value in inputs.items():
             setattr(args, key, value)
         utils.show_args(args)
