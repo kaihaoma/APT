@@ -1,6 +1,7 @@
 from .ops import *
 from .sampler import *
 from .sageconv import *
+from .gatconv import *
 import os
 import time
 

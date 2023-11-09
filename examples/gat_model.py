@@ -27,6 +27,7 @@ class NPCGAT(nn.Module):
         self.in_feats = in_feats
         self.n_hidden = n_hidden
         self.n_classes = n_classes
+        self.heads = heads
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
             self.layers.append(
@@ -42,9 +43,9 @@ class NPCGAT(nn.Module):
             for i in range(1, self.n_layers - 1):
                 self.layers.append(
                     dglnn.GATConv(
-                        n_hidden * heads[i],
+                        n_hidden * heads[i - 1],
                         n_hidden,
-                        heads[i + 1],
+                        heads[i],
                         feat_drop=dropout,
                         attn_drop=dropout,
                         activation=activation,
@@ -85,12 +86,13 @@ class NPCGAT(nn.Module):
         h = input_feats
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
             h = layer(block, h)
-            if l == 0:
-                h = npc.NPFeatureShuffle.apply(fsi, h)
             if l == self.n_layers - 1:  # last layer
                 h = h.mean(1)
             else:  # other layer(s)
                 h = h.flatten(1)
+            if l == 0:
+                fsi.feat_dim = self.n_hidden * self.heads[0] if l != self.n_layers - 1 else self.n_hidden
+                h = npc.NPFeatureShuffle.apply(fsi, h)
         return h  # event
 
 
@@ -129,9 +131,9 @@ class DGLGAT(nn.Module):
             for i in range(1, self.n_layers - 1):
                 self.layers.append(
                     dglnn.GATConv(
-                        n_hidden * heads[i],
+                        n_hidden * heads[i - 1],
                         n_hidden,
-                        heads[i + 1],
+                        heads[i],
                         feat_drop=dropout,
                         attn_drop=dropout,
                         activation=activation,
@@ -210,9 +212,9 @@ class SPGAT(nn.Module):
             for i in range(1, self.n_layers - 1):
                 self.layers.append(
                     dglnn.GATConv(
-                        n_hidden * heads[i],
+                        n_hidden * heads[i - 1],
                         n_hidden,
-                        heads[i + 1],
+                        heads[i],
                         feat_drop=dropout,
                         attn_drop=dropout,
                         activation=activation,
@@ -251,9 +253,9 @@ class SPGAT(nn.Module):
 
         h = input_feats
         # layer 0
-        h = self.layers[0](blocks[:2], h, fsi)
+        h = self.layers[0](blocks[0], h, fsi)
         # layer 1~n-1
-        for l, (layer, block) in enumerate(zip(self.layers[1:], blocks[2:])):
+        for l, (layer, block) in enumerate(zip(self.layers[1:], blocks[1:])):
             h = layer(block, h)
             if l == self.n_layers - 2:  # last layer
                 h = h.mean(1)
@@ -315,7 +317,7 @@ class MPGAT(nn.Module):
         if self.n_layers > 1:
             # first mp layer
             self.mp_layers = npc.MPGATConv(
-                in_feats,
+                self.in_feats_list[self.rank],
                 n_hidden,
                 heads[0],
                 feat_drop=dropout,

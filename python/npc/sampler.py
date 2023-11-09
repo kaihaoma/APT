@@ -145,12 +145,7 @@ class MixedNeighborSampler(object):
         # Shape negibors = sum(send_offset) * self.las_fanouts
         # event.record()
         seeds, neighbors, perm, send_offset, recv_offset = np_sample_and_shuffle(seeds, self.las_fanouts)
-        replicated_seeds = torch.repeat_interleave(seeds, self.las_fanouts)
-        if self.debug_flag:
-            self.debug_check(neighbors, replicated_seeds)
-
-        block_g = dgl.graph((neighbors, replicated_seeds))
-        block = dgl.to_block(g=block_g, dst_nodes=seeds)
+        block = create_dgl_block(seeds, neighbors, self.las_fanouts)
         blocks.insert(0, block)
         seeds = block.srcdata[dgl.NID]
 
@@ -214,7 +209,7 @@ class MixedPSNeighborSampler(object):
                     if self.model == "GAT":
                         num_dst = seeds.numel()
                         unique_neigh, arange_src = torch.unique(neighbors, return_inverse=True)
-                        arange_dst = torch.arange(num_dst, device=device).repeat_interleave(fanout)
+                        arange_dst = torch.arange(num_dst, device=seeds.device).repeat_interleave(fanout)
                         block = create_block_from_coo(arange_src, arange_dst, unique_neigh.numel(), num_dst)
 
                         (
