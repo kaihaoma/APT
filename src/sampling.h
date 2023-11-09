@@ -38,6 +38,10 @@ std::vector<torch::Tensor> SPSampleAndShuffle(
     IdType num_seeds, torch::Tensor send_frontier,
     torch::Tensor sorted_allnodes, torch::Tensor unique_frontier);
 
+// SP sample shuffle src nodes
+// input: uniqued src nodes
+std::vector<torch::Tensor> SPSampleShuffleSrc(torch::Tensor unique_src);
+
 // MP sample shuffle
 std::vector<torch::Tensor> MPSampleShuffle(
     torch::Tensor seeds, torch::Tensor unique_frontier, torch::Tensor coo_row);

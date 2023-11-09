@@ -9,6 +9,7 @@
 #include "./ops/collective.h"
 #include "./relabel.h"
 #include "./sampling.h"
+#include "./sddmm.h"
 #include "./spmm.h"
 #include "./utils.h"
 
@@ -31,6 +32,7 @@ TORCH_LIBRARY(npc, m) {
       .def("src_to_vir", &SrcToVir)
       .def("np_sample_and_shuffle", &NPSampleAndShuffle)
       .def("sp_sample_and_shuffle", &SPSampleAndShuffle)
+      .def("sp_sample_shuffle_src", &SPSampleShuffleSrc)
       .def("mp_sample_shuffle", &MPSampleShuffle)
       .def("feat_shuffle", &FeatShuffle)
       .def("sp_feat_shuffle", &SPFeatShuffle)
@@ -38,7 +40,11 @@ TORCH_LIBRARY(npc, m) {
       .def("mp_feat_shuffle_bwd", &MPFeatShuffleBwd)
       .def("shuffle_seeds", &ShuffleSeeds)
       .def("relabel_csc", &RelabelCSC)
-      .def("spmm_copy_u_sum", &CopyUSum);
+      .def("spmm_copy_u_sum", &CopyUSum)
+      .def("spmm_copy_e_sum", &CopyESum)
+      .def("spmm_u_mul_e_sum", &UMulESum)
+      .def("sddmm_u_add_v", &UAddV)
+      .def("sddmm_u_mul_v", &UMulV);
 }
 
 }  // namespace npc

@@ -44,6 +44,21 @@ torch::Tensor SPFeatShuffle(
   return outputs;
 }
 
+torch::Tensor SPFeatShuffleAllGather(
+    torch::Tensor inputs, torch::Tensor send_sizes, torch::Tensor recv_sizes,
+    IdType total_recv_size, IdType expand) {
+  auto* state = NPCState::Global();
+  auto world_size = state->world_size;
+  auto flatten_inputs = inputs.flatten();
+  auto flatten_outputs =
+      torch::empty(total_recv_size * expand, inputs.options());
+  SPFeatureAlltoAll(
+      flatten_inputs, flatten_outputs, send_sizes, recv_sizes, expand,
+      state->trainer_id);
+  auto outputs = flatten_outputs.reshape({-1, expand});
+  return outputs;
+}
+
 torch::Tensor MPFeatShuffleFwd(
     torch::Tensor inputs, torch::Tensor send_size, torch::Tensor recv_size,
     IdType feat_dim) {
@@ -65,7 +80,8 @@ torch::Tensor MPFeatShuffleBwd(
   auto flatten_inputs = inputs.flatten();
   auto flatten_outputs =
       torch::empty(total_recv_size * feat_dim, inputs.options());
-  AllBroadcastV2(flatten_inputs, flatten_outputs, send_size, recv_size, feat_dim);
+  AllBroadcastV2(
+      flatten_inputs, flatten_outputs, send_size, recv_size, feat_dim);
   auto outputs = flatten_outputs.reshape({-1, feat_dim});
   return outputs;
 }

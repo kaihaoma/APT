@@ -400,6 +400,7 @@ def load_subtensor(args, sample_result):
         # [0]input_nodes, [1]seeds, [2]blocks, [3]perm, [4]send_offset, [5]recv_offset
         fsi = NPFeatureShuffleInfo(
             feat_dim=args.num_hidden,
+            num_dst=None,
             permutation=sample_result[3],
             send_offset=sample_result[4].to("cpu"),
             recv_offset=sample_result[5].to("cpu"),
@@ -410,21 +411,31 @@ def load_subtensor(args, sample_result):
             fsi,
         )
     elif args.system == "SP":
-        # [0]input_nodes [1] seeds, [2]blocks [3]send_size [4]recv_size
-        send_sizes = sample_result[3].to("cpu")
-        recv_sizes = sample_result[4].to("cpu")
-        num_dst = sample_result[2][2].number_of_src_nodes()
-        total_send_size = send_sizes[1::2].sum().item()
-        total_recv_size = recv_sizes[1::2].sum().item()
+        if args.model == "GAT":
+            # [0]input_nodes, [1]seeds, [2]blocks, [3]perm, [4]send_offset, [5]recv_offset
+            fsi = NPFeatureShuffleInfo(
+                feat_dim=args.num_hidden,
+                num_dst=sample_result[2][0].number_of_dst_nodes(),
+                permutation=sample_result[3],
+                send_offset=sample_result[4].to("cpu"),
+                recv_offset=sample_result[5].to("cpu"),
+            )
+        else:
+            # [0]input_nodes [1] seeds, [2]blocks [3]send_size [4]recv_size
+            send_sizes = sample_result[3].to("cpu")
+            recv_sizes = sample_result[4].to("cpu")
+            num_dst = sample_result[2][2].number_of_src_nodes()
+            total_send_size = send_sizes[1::2].sum().item()
+            total_recv_size = recv_sizes[1::2].sum().item()
 
-        fsi = SPFeatureShuffleInfo(
-            feat_dim=args.num_hidden,
-            send_sizes=send_sizes,
-            recv_sizes=recv_sizes,
-            num_dst=num_dst,
-            total_send_size=total_send_size,
-            total_recv_size=total_recv_size,
-        )
+            fsi = SPFeatureShuffleInfo(
+                feat_dim=args.num_hidden,
+                send_sizes=send_sizes,
+                recv_sizes=recv_sizes,
+                num_dst=num_dst,
+                total_send_size=total_send_size,
+                total_recv_size=total_recv_size,
+            )
 
         return (
             sample_result[2],
@@ -459,12 +470,43 @@ def shuffle_seeds(
 @dataclass
 class NPFeatureShuffleInfo(object):
     feat_dim: int
+    num_dst: int
     send_offset: List[int]
     recv_offset: List[int]
     permutation: torch.Tensor
 
 
 class NPFeatureShuffle(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, fsi: NPFeatureShuffleInfo, input_tensor: torch.Tensor) -> torch.Tensor:
+        ctx.fsi = fsi
+
+        shuffle_result = feat_shuffle(
+            input_tensor,
+            fsi.send_offset,
+            fsi.recv_offset,
+            fsi.permutation,
+            fsi.feat_dim,
+            1,
+        )
+        return shuffle_result
+
+    @staticmethod
+    def backward(ctx, grad_output_tensor: torch.Tensor) -> torch.Tensor:
+        fsi: NPFeatureShuffleInfo = ctx.fsi
+
+        shuffle_grad = feat_shuffle(
+            grad_output_tensor,
+            fsi.recv_offset,
+            fsi.send_offset,
+            fsi.permutation,
+            fsi.feat_dim,
+            0,
+        )
+        return (None, shuffle_grad)
+
+
+class SPFeatureShuffleGAT(torch.autograd.Function):
     @staticmethod
     def forward(ctx, fsi: NPFeatureShuffleInfo, input_tensor: torch.Tensor) -> torch.Tensor:
         ctx.fsi = fsi

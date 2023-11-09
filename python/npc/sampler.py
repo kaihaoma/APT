@@ -29,6 +29,12 @@ def sp_sample_and_shuffle(
     return torch.ops.npc.sp_sample_and_shuffle(num_dst, send_frontier, sorted_allnodes, unique_frontier)
 
 
+def sp_sample_shuffle_src(
+    unique_src: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    return torch.ops.npc.sp_sample_shuffle_src(unique_src)
+
+
 def mp_sample_shuffle(seeds: torch.Tensor, unique_frontier: torch.Tensor, coo_row: torch.Tensor) -> List[torch.Tensor]:
     return torch.ops.npc.mp_sample_shuffle(seeds, unique_frontier, coo_row)
 
@@ -65,7 +71,7 @@ def tensor_relabel_csc(seeds, neighbors) -> Tuple[torch.Tensor, torch.Tensor]:
     return torch.ops.npc.relabel_csc(seeds, neighbors)
 
 
-def create_dgl_block(seeds, neighbors, fanout):
+def create_dgl_block(seeds, neighbors, fanout, return_coo=False):
     unique_frontier, indices = tensor_relabel_csc(seeds, neighbors)
     coo_col = torch.arange(0, seeds.numel(), device=indices.device).repeat_interleave(fanout)
 
@@ -77,7 +83,10 @@ def create_dgl_block(seeds, neighbors, fanout):
     )
     block.srcdata["_ID"] = unique_frontier
 
-    return block
+    if return_coo:
+        return block, (indices, coo_col)
+    else:
+        return block
 
 
 # Loader
@@ -150,6 +159,7 @@ class MixedPSNeighborSampler(object):
         world_size,
         fanouts,
         system,
+        model,
         num_total_nodes,
         debug_info=None,
     ):
@@ -159,6 +169,7 @@ class MixedPSNeighborSampler(object):
         self.num_layers = len(fanouts)
         assert system in ["DP", "NP", "MP", "SP"]
         self.system = system
+        self.model = model
         self.debug_flag = False
         self.num_total_nodes = num_total_nodes
         self.sp_val = (rank << 20) * num_total_nodes
@@ -195,51 +206,76 @@ class MixedPSNeighborSampler(object):
                     sampling_result = (perm, send_offset, recv_offset)
 
                 elif self.system == "SP":
-                    num_dst = seeds.numel()
-                    map_src = src_to_vir(fanout, num_dst, neighbors)
-                    sorted_mapsrc, perm_mapsrc = torch.sort(map_src)
+                    if self.model == "GAT":
+                        num_dst = seeds.numel()
+                        unique_neigh, arange_src = torch.unique(neighbors, return_inverse=True)
+                        arange_dst = torch.arange(num_dst, device=seeds.device).repeat_interleave(fanout)
+                        block = create_block_from_coo(arange_src, arange_dst, unique_neigh.numel(), num_dst)
 
-                    unique_frontier, arange_src = torch.unique(map_src, return_inverse=True)
-                    # build block1 by dgl.create_block
-                    num_dst = seeds.numel()
-                    device = seeds.device
-                    arange_dst = torch.arange(num_dst, device=device).repeat_interleave(fanout)
-                    block1 = create_block_from_coo(arange_src, arange_dst, unique_frontier.numel(), num_dst)
-                    blocks.insert(0, block1)
+                        (
+                            shuffled_neigh,
+                            perm,
+                            send_offset,
+                            recv_offset,
+                        ) = sp_sample_shuffle_src(unique_neigh)
 
-                    # send_frontier = (pack virtual nodes(with global id) and original)
-                    # [from_rank, ori_dst, ori_src]
-                    # rules of send_frontier: from_rank * (num_total_nodes * num_total_nodes) + perm_st * num_total_nodes + neighbors[perm_mapsrc]
-                    perm_dst = seeds.repeat_interleave(fanout)[perm_mapsrc]
-                    send_frontier = (
-                        self.rank * (self.num_total_nodes * self.num_total_nodes) + perm_dst * self.num_total_nodes + neighbors[perm_mapsrc]
-                    )
+                        blocks.insert(0, block)
+                        sampling_result = (perm, send_offset, recv_offset)
 
-                    (
-                        recv_seeds,
-                        recv_neighbors,
-                        send_sizes,
-                        recv_sizes,
-                    ) = sp_sample_and_shuffle(
-                        num_dst,  # num_dst
-                        send_frontier,  # send_frontier
-                        sorted_mapsrc,  # sorted_mapsrc
-                        unique_frontier,  # unique_frontier
-                    )
+                        # seeds contains original dst nodes and recv src nodes
+                        seeds = torch.cat((seeds, shuffled_neigh))
 
-                    # build block2 by dgl.to_block
-                    unique_src, arange_src = torch.unique(recv_neighbors, return_inverse=True)
-                    unique_dst, arange_dst = torch.unique(recv_seeds, return_inverse=True)
-                    block2 = create_block_from_coo(arange_src, arange_dst, unique_src.numel(), unique_dst.numel())
+                    else:
+                        num_dst = seeds.numel()
+                        device = seeds.device
+                        map_src = src_to_vir(fanout, num_dst, neighbors)
+                        sorted_mapsrc, perm_mapsrc = torch.sort(map_src)
 
-                    blocks.insert(0, block2)
-                    sampling_result = (send_sizes, recv_sizes)
+                        unique_frontier, arange_src = torch.unique(map_src, return_inverse=True)
+                        # build block1 by dgl.create_block
+                        arange_dst = torch.arange(num_dst, device=device).repeat_interleave(fanout)
+                        block1 = create_block_from_coo(arange_src, arange_dst, unique_frontier.numel(), num_dst)
+                        blocks.insert(0, block1)
 
-                    # seeds contains original dst nodes and recv src nodes
-                    seeds = torch.cat((seeds, unique_src))
+                        # send_frontier = (pack virtual nodes(with global id) and original)
+                        # [from_rank, ori_dst, ori_src]
+                        # rules of send_frontier: from_rank * (num_total_nodes * num_total_nodes) + perm_st * num_total_nodes + neighbors[perm_mapsrc]
+                        perm_dst = seeds.repeat_interleave(fanout)[perm_mapsrc]
+                        send_frontier = (
+                            self.rank * (self.num_total_nodes * self.num_total_nodes) + perm_dst * self.num_total_nodes + neighbors[perm_mapsrc]
+                        )
+
+                        (
+                            recv_seeds,
+                            recv_neighbors,
+                            send_sizes,
+                            recv_sizes,
+                        ) = sp_sample_and_shuffle(
+                            num_dst,  # num_dst
+                            send_frontier,  # send_frontier
+                            sorted_mapsrc,  # sorted_mapsrc
+                            unique_frontier,  # unique_frontier
+                        )
+
+                        # build block2 by dgl.to_block
+                        unique_src, arange_src = torch.unique(recv_neighbors, return_inverse=True)
+                        unique_dst, arange_dst = torch.unique(recv_seeds, return_inverse=True)
+                        block2 = create_block_from_coo(arange_src, arange_dst, unique_src.numel(), unique_dst.numel())
+
+                        blocks.insert(0, block2)
+                        sampling_result = (send_sizes, recv_sizes)
+
+                        # seeds contains original dst nodes and recv src nodes
+                        seeds = torch.cat((seeds, unique_src))
 
                 elif self.system == "MP":
-                    unique_frontier, coo_row = tensor_relabel_csc(seeds, neighbors)
+                    if self.model == "GAT":
+                        block, (coo_row, coo_col) = create_dgl_block(seeds, neighbors, fanout, True)
+                        unique_frontier = block.srcdata["_ID"]
+                        send_frontier_size = torch.tensor([unique_frontier.numel()])
+                    else:
+                        unique_frontier, coo_row = tensor_relabel_csc(seeds, neighbors)
+
                     (
                         all_frontier,
                         all_coo_row,
@@ -248,9 +284,14 @@ class MixedPSNeighborSampler(object):
                         recv_frontier_size,
                         recv_coo_size,
                     ) = mp_sample_shuffle(seeds, unique_frontier, coo_row)
-                    all_coo_col = torch.cat([torch.arange(0, i, device=all_coo_row.device).repeat_interleave(fanout) for i in recv_size])
-                    blocks.insert(0, (all_coo_row, all_coo_col, recv_frontier_size, recv_coo_size, recv_size))
-                    sampling_result = (send_size, recv_size)
+
+                    if self.model == "GAT":
+                        blocks.insert(0, block)
+                        sampling_result = (send_frontier_size, recv_frontier_size)
+                    else:
+                        all_coo_col = torch.cat([torch.arange(0, i, device=all_coo_row.device).repeat_interleave(fanout) for i in recv_size])
+                        blocks.insert(0, (all_coo_row, all_coo_col, recv_frontier_size, recv_coo_size, recv_size))
+                        sampling_result = (send_size, recv_size)
                     seeds = all_frontier
 
             if layer_id != self.num_layers - 1 or self.system not in ("SP", "MP"):

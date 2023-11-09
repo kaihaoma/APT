@@ -1,4 +1,4 @@
-master_addr=172.31.40.2
+master_addr=172.31.31.32
 fanout_array=(10,10,10)
 configs=papers_w8_metis
 #configs=products_w8
