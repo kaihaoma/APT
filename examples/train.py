@@ -4,8 +4,9 @@ import dgl
 import npc
 import torch
 import time
-from model import *
 from gat_model import *
+from sage_model import *
+from gcn_model import *
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn.functional as F
@@ -153,7 +154,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
             training_model = MPSAGE(
                 args=args,
                 activation=torch.relu,
-            )
+            ).to(device)
         else:
             raise ValueError(f"Invalid system:{args.system}")
     elif args.model == "GAT":
@@ -181,7 +182,30 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 args=args,
                 heads=heads,
                 activation=torch.relu,
-            )
+            ).to(device)
+        else:
+            raise ValueError(f"Invalid system:{args.system}")
+    elif args.model == "GCN":
+        if args.system == "DP":
+            training_model = DGLGCN(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "NP":
+            training_model = NPCGCN(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "SP":
+            training_model = SPGCN(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
+        elif args.system == "MP":
+            training_model = MPGCN(
+                args=args,
+                activation=torch.relu,
+            ).to(device)
         else:
             raise ValueError(f"Invalid system:{args.system}")
 

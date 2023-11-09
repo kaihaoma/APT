@@ -1,15 +1,13 @@
 import torch
 import torch.nn as nn
-import dgl.nn as dglnn
+import dgl.nn.pytorch as dglnn
 import npc
 import time
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from conv import EXPSAGEConv
 
-
-class NPCSAGE(nn.Module):
+class NPCGCN(nn.Module):
     def __init__(
         self,
         args,
@@ -42,12 +40,12 @@ class NPCSAGE(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(dglnn.SAGEConv(in_feats, n_hidden, "mean"))
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm="none"))
             for i in range(1, self.n_layers - 1):
-                self.layers.append(dglnn.SAGEConv(n_hidden, n_hidden, "mean"))
-            self.layers.append(dglnn.SAGEConv(n_hidden, n_classes, "mean"))
+                self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
+            self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
         else:
-            self.layers.append(dglnn.SAGEConv(in_feats, n_classes, "mean"))
+            self.layers.append(dglnn.GraphConv(in_feats, n_classes))
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
 
@@ -73,7 +71,7 @@ class NPCSAGE(nn.Module):
         return h  # event
 
 
-class DGLSAGE(nn.Module):
+class DGLGCN(nn.Module):
     def __init__(self, args, activation=torch.relu):
         super().__init__()
         self.init(
@@ -86,7 +84,7 @@ class DGLSAGE(nn.Module):
         )
 
     def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout):
-        print(f"[Note]DGL SAGE: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
+        print(f"[Note]DGL GCN: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
         self.in_feats = in_feats
@@ -94,12 +92,12 @@ class DGLSAGE(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(dglnn.SAGEConv(in_feats, n_hidden, "mean"))
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm="none"))
             for i in range(1, self.n_layers - 1):
-                self.layers.append(dglnn.SAGEConv(n_hidden, n_hidden, "mean"))
-            self.layers.append(dglnn.SAGEConv(n_hidden, n_classes, "mean"))
+                self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
+            self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
         else:
-            self.layers.append(dglnn.SAGEConv(in_feats, n_classes, "mean"))
+            self.layers.append(dglnn.GraphConv(in_feats, n_classes))
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
 
@@ -111,13 +109,13 @@ class DGLSAGE(nn.Module):
         h = x
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
             h = layer(block, h)
-            if l != self.n_layers - 1:
+            if l != len(self.layers) - 1:
                 h = self.activation(h)
                 h = self.dropout(h)
         return h
 
 
-class SPSAGE(nn.Module):
+class SPGCN(nn.Module):
     def __init__(self, args, activation=torch.relu):
         super().__init__()
         self.init(
@@ -145,12 +143,12 @@ class SPSAGE(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(EXPSAGEConv(in_feats, n_hidden, "mean"))
+            self.layers.append(npc.SPGraphConv(in_feats, n_hidden, norm="none"))
             for i in range(1, self.n_layers - 1):
-                self.layers.append(dglnn.SAGEConv(n_hidden, n_hidden, "mean"))
-            self.layers.append(dglnn.SAGEConv(n_hidden, n_classes, "mean"))
+                self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
+            self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
         else:
-            self.layers.append(dglnn.SAGEConv(in_feats, n_classes, "mean"))
+            self.layers.append(dglnn.GraphConv(in_feats, n_classes))
         self.num_layers = len(self.layers)
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
@@ -183,7 +181,7 @@ class SimpleConfig:
 
 # MODEL PARA
 # wrap Data Parallel
-class MPSAGE(nn.Module):
+class MPGCN(nn.Module):
     def __init__(self, args, activation=torch.relu):
         super().__init__()
         self.init(
@@ -226,15 +224,10 @@ class MPSAGE(nn.Module):
 
         if self.n_layers > 1:
             # first mp layer
-            # self.mp_layers = dglnn.SAGEConv(
-            #     self.in_feats_list[self.rank],
-            #     self.n_hidden,
-            #     "mean",
-            # ).to(self.device)
-            self.mp_layers = npc.MPSAGEConv(
+            self.mp_layers = npc.MPGraphConv(
                 self.in_feats_list[self.rank],
                 self.n_hidden,
-                "mean",
+                norm="none",
             ).to(self.device)
             # ddp
             ddp_config = SimpleConfig(
@@ -245,7 +238,7 @@ class MPSAGE(nn.Module):
                 dropout=dropout,
             )
             self.ddp_modules = DDP(
-                DGLSAGE(ddp_config).to(self.device),
+                DGLGCN(ddp_config).to(self.device),
                 device_ids=[self.device],
                 output_device=self.device,
             )

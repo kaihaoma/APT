@@ -2,6 +2,7 @@ from .ops import *
 from .sampler import *
 from .sageconv import *
 from .gatconv import *
+from .graphconv import *
 import os
 import time
 
