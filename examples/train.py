@@ -82,7 +82,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         rank_val_idx = val_idx[rank * num_val_per_rank : (rank + 1) * num_val_per_rank]
 
         if rank == 0:
-            acc_file = open(f"./logs/accuracy/{args.system}_{args.dataset}_{world_size}.txt", "w")
+            acc_file = open(f"./logs/accuracy/{args.model}_{args.system}_{args.dataset}_{world_size}.txt", "w")
 
     if args.system == "NP":
         sampler = npc.MixedNeighborSampler(
