@@ -172,7 +172,7 @@ class MixedPSNeighborSampler(object):
         self.model = model
         self.debug_flag = False
         self.num_total_nodes = num_total_nodes
-        self.sp_val = (rank << 20) * num_total_nodes
+        self.sp_base = 10000000
         if debug_info is not None:
             self.debug_graph, self.debug_min_vids, self.num_nodes = debug_info
             self.debug_flag = True
@@ -233,17 +233,16 @@ class MixedPSNeighborSampler(object):
 
                         unique_frontier, arange_src = torch.unique(map_src, return_inverse=True)
                         # build block1 by dgl.create_block
-                        arange_dst = torch.arange(num_dst, device=device).repeat_interleave(fanout)
+                        arange_dst = unique_frontier % num_dst  # [0, num_dst)
+                        arange_src = torch.arange(0, unique_frontier.numel(), device=device)  # [0, #unique_frontier)
                         block1 = create_block_from_coo(arange_src, arange_dst, unique_frontier.numel(), num_dst)
                         blocks.insert(0, block1)
 
                         # send_frontier = (pack virtual nodes(with global id) and original)
                         # [from_rank, ori_dst, ori_src]
                         # rules of send_frontier: from_rank * (num_total_nodes * num_total_nodes) + perm_st * num_total_nodes + neighbors[perm_mapsrc]
-                        perm_dst = seeds.repeat_interleave(fanout)[perm_mapsrc]
-                        send_frontier = (
-                            self.rank * (self.num_total_nodes * self.num_total_nodes) + perm_dst * self.num_total_nodes + neighbors[perm_mapsrc]
-                        )
+                        perm_dst = sorted_mapsrc % num_dst
+                        send_frontier = self.rank * (self.sp_base * self.num_total_nodes) + perm_dst * self.num_total_nodes + neighbors[perm_mapsrc]
 
                         (
                             recv_seeds,
