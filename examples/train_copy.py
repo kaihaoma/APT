@@ -134,97 +134,10 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
     )
 
     # define model
-    if args.model == "SAGE":
-        if args.system == "DP":
-            training_model = DGLSAGE(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "NP":
-            training_model = NPCSAGE(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "SP":
-            training_model = SPSAGE(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "MP":
-            training_model = MPSAGE(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        else:
-            raise ValueError(f"Invalid system:{args.system}")
-    elif args.model == "GAT":
-        heads = [4] * len(args.fan_out)
-        if args.system == "DP":
-            training_model = DGLGAT(
-                args=args,
-                heads=heads,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "NP":
-            training_model = NPCGAT(
-                args=args,
-                heads=heads,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "SP":
-            training_model = SPGAT(
-                args=args,
-                heads=heads,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "MP":
-            training_model = MPGAT(
-                args=args,
-                heads=heads,
-                activation=torch.relu,
-            ).to(device)
-        else:
-            raise ValueError(f"Invalid system:{args.system}")
-    elif args.model == "GCN":
-        if args.system == "DP":
-            training_model = DGLGCN(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "NP":
-            training_model = NPCGCN(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "SP":
-            training_model = SPGCN(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "MP":
-            training_model = MPGCN(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        else:
-            raise ValueError(f"Invalid system:{args.system}")
+    training_model = DGLGCN(args=args, activation=torch.relu).to(device)
+    print(f"[Note] {args.system} training model: {type(training_model)}")
+    training_model = DDP(training_model, device_ids=[device], output_device=device)
 
-    print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
-    weights = training_model.layers[0].weight.detach().clone()
-    print(f"[Note]dp_weights:{weights}")
-    if args.world_size > 1:
-        if args.system == "MP":
-            # check training model
-            for name, param in training_model.named_parameters():
-                print(f"[Note]name:{name}\t param:{param.shape}\t dev:{param.device}")
-
-        else:
-            print(f"[Note] {args.system} training model: {type(training_model)}")
-            training_model = DDP(
-                training_model,
-                device_ids=[device],
-                output_device=device,
-            )
     print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
     optimizer = torch.optim.Adam(training_model.parameters(), lr=0.01, weight_decay=5e-4)
     dist.barrier()
@@ -239,12 +152,10 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
         torch.set_deterministic_debug_mode("warn")
         # generating 2nd model & sampler
-        tocheck_model = SPGCN(
+        tocheck_model = MPGCN(
             args=args,
             activation=torch.relu,
         ).to(device)
-        tocheck_model.layers[0].weight.data = weights
-        tocheck_model = DDP(tocheck_model, device_ids=[device], output_device=device)
         tocheck_sampler = npc.RefSampler(
             rank=rank,
             world_size=world_size,
@@ -258,19 +169,19 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         sample_result = next(iter(dataloader))
         tocheck_sample_result = tocheck_sampler.sample(None, sample_result[1])
         dp_sample_result = tocheck_sample_result[:3]
-        sp_sample_result = tocheck_sample_result[3:]
+        mp_sample_result = tocheck_sample_result[3:]
 
         # print(f"[Note]dp_blocks:{dp_sample_result[2][1]}\t sp_blocks:{sp_sample_result[2][2]}")
 
         # feature loading
+        args.system = "DP"
         dp_loading_result = npc.load_subtensor(args, dp_sample_result)
-        args.system = "SP"
-        sp_loading_result = npc.load_subtensor(args, sp_sample_result)
+        args.system = "MP"
+        mp_loading_result = npc.load_subtensor(args, mp_sample_result)
 
         # fwd
-
         dp_batch_pred = training_model(dp_loading_result)
-        sp_batch_pred = tocheck_model(sp_loading_result)
+        sp_batch_pred = tocheck_model(mp_loading_result)
 
         print(f"[Note]equal:{torch.all(torch.eq(dp_batch_pred, sp_batch_pred))}\t shape:{dp_batch_pred}\t {sp_batch_pred}")
 

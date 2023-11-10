@@ -6,7 +6,7 @@ from typing import Tuple
 import dgl.function as fn
 import numpy as np
 
-from .ops import SPFeatureShuffle, MPFeatureShuffle
+from .ops import SPFeatureShuffle, MPFeatureShuffle, MPFeatureShuffleInfo
 
 
 class SPGraphConv(nn.Module):
@@ -177,9 +177,6 @@ class MPGraphConv(nn.Module):
         self._out_feats = out_feats
         self._norm = norm
         self._allow_zero_in_degree = allow_zero_in_degree
-        
-        print(in_feats)
-        exit()
 
         if weight:
             self.weight = nn.Parameter(torch.Tensor(in_feats, out_feats))
@@ -201,7 +198,7 @@ class MPGraphConv(nn.Module):
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
-    def forward(self, graph, feat, fsi):
+    def forward(self, graph, feat, fsi: MPFeatureShuffleInfo):
         # (
         #     all_coo_row,
         #     all_coo_col,
@@ -238,8 +235,12 @@ class MPGraphConv(nn.Module):
         #         norm = 1.0 / fanout
         #     rst = rst * norm
 
-        feat_src = torch.matmul(feat, self.weight)
+        # feat_src = torch.matmul(feat, self.weight)
+        feat_src = feat
+        print("before shuffle")
+        fsi.feat_dim = self._in_feats
         feat_src = MPFeatureShuffle.apply(fsi, feat_src)
+        print("reach here")
         feat_dst = feat_src[: graph.number_of_dst_nodes()]
 
         with graph.local_scope():

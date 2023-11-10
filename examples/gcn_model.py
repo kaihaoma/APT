@@ -72,7 +72,7 @@ class NPCGCN(nn.Module):
 
 
 class DGLGCN(nn.Module):
-    def __init__(self, args, activation=torch.relu):
+    def __init__(self, args, activation=torch.relu, norm_first_layer="none"):
         super().__init__()
         self.init(
             args.fan_out,
@@ -81,9 +81,10 @@ class DGLGCN(nn.Module):
             args.num_classes,
             activation,
             args.dropout,
+            norm_first_layer
         )
 
-    def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout):
+    def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout, norm_first_layer):
         print(f"[Note]DGL GCN: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
@@ -92,13 +93,13 @@ class DGLGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm="none", bias=False, activation=None))
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm=norm_first_layer, bias=False, activation=None, weight=False))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
         else:
             self.layers.append(dglnn.GraphConv(in_feats, n_classes))
-        # self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(dropout)
         self.activation = activation
 
     def forward(self, sampling_result):
@@ -109,11 +110,10 @@ class DGLGCN(nn.Module):
         h = x
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
             h = layer(block, h)
+            return h
             if l != len(self.layers) - 1:
                 h = self.activation(h)
-
-                return h
-                # h = self.dropout(h)
+                h = self.dropout(h)
         return h
 
 
@@ -242,7 +242,7 @@ class MPGCN(nn.Module):
                 dropout=dropout,
             )
             self.ddp_modules = DDP(
-                DGLGCN(ddp_config).to(self.device),
+                DGLGCN(ddp_config, torch.relu, "both").to(self.device),
                 device_ids=[self.device],
                 output_device=self.device,
             )
@@ -266,6 +266,7 @@ class MPGCN(nn.Module):
         h = x
         # fir mp layer
         h = self.mp_layers(blocks[0], h, fsi)
+        return h
         # custom shuffle
         # h = npc.MPFeatureShuffle.apply(fsi, h)
         h = h + self.bias
