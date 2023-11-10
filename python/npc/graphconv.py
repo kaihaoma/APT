@@ -194,7 +194,8 @@ class MPGraphConv(nn.Module):
 
     def reset_parameters(self):
         if self.weight is not None:
-            nn.init.xavier_uniform_(self.weight)
+            # nn.init.xavier_uniform_(self.weight)
+            nn.init.ones_(self.weight)
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
@@ -235,12 +236,8 @@ class MPGraphConv(nn.Module):
         #         norm = 1.0 / fanout
         #     rst = rst * norm
 
-        # feat_src = torch.matmul(feat, self.weight)
-        feat_src = feat
-        print("before shuffle")
-        fsi.feat_dim = self._in_feats
+        feat_src = torch.matmul(feat, self.weight)
         feat_src = MPFeatureShuffle.apply(fsi, feat_src)
-        print("reach here")
         feat_dst = feat_src[: graph.number_of_dst_nodes()]
 
         with graph.local_scope():

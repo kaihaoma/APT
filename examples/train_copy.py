@@ -58,13 +58,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
     train_nid = partition_data.train_nid
     min_vids = partition_data.min_vids
-    labels = partition_data.labels
-    cache_mask = partition_data.cache_mask
-
-    num_cached_feat_nodes = partition_data.num_cached_feat_nodes
-    num_cached_feat_elements = partition_data.num_cached_feat_elements
-    num_cached_graph_nodes = partition_data.num_cached_graph_nodes
-    num_cached_graph_elements = partition_data.num_cached_graph_elements
 
     # define define sampler dataloader
     if args.debug:
@@ -85,23 +78,15 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         if rank == 0:
             acc_file = open(f"./logs/accuracy/{args.model}_{args.system}_{args.dataset}_{world_size}.txt", "w")
 
-    if args.system == "NP":
-        sampler = npc.MixedNeighborSampler(
-            rank=rank,
-            fanouts=args.fan_out,
-            debug_info=(debug_graph, debug_min_vids, num_nodes) if args.debug else None,
-        )
-
-    else:
-        sampler = npc.MixedPSNeighborSampler(
-            rank=rank,
-            world_size=world_size,
-            fanouts=args.fan_out,
-            system=args.system,
-            model=args.model,
-            num_total_nodes=min_vids[-1],
-            debug_info=(debug_graph, debug_min_vids, num_nodes) if args.debug else None,
-        )
+    sampler = npc.MixedPSNeighborSampler(
+        rank=rank,
+        world_size=world_size,
+        fanouts=args.fan_out,
+        system=args.system,
+        model=args.model,
+        num_total_nodes=min_vids[-1],
+        debug_info=(debug_graph, debug_min_vids, num_nodes) if args.debug else None,
+    )
 
     fake_graph = dgl.rand_graph(1, 1)
     dataloader = dgl.dataloading.DataLoader(
@@ -139,7 +124,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
     training_model = DDP(training_model, device_ids=[device], output_device=device)
 
     print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
-    optimizer = torch.optim.Adam(training_model.parameters(), lr=0.01, weight_decay=5e-4)
     dist.barrier()
     print(f"[Note]Rank#{rank} Ready to train\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
 
@@ -171,194 +155,22 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         dp_sample_result = tocheck_sample_result[:3]
         mp_sample_result = tocheck_sample_result[3:]
 
-        # print(f"[Note]dp_blocks:{dp_sample_result[2][1]}\t sp_blocks:{sp_sample_result[2][2]}")
-
         # feature loading
         args.system = "DP"
+        partition_data = npc.load_partition(args=args, rank=rank, device=device, shared_tensor_list=shared_tensor_list)
+        print(f"[Note]Done load parititon data, {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
         dp_loading_result = npc.load_subtensor(args, dp_sample_result)
         args.system = "MP"
+        partition_data = npc.load_partition(args=args, rank=rank, device=device, shared_tensor_list=shared_tensor_list)
+        print(f"[Note]Done load parititon data, {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
         mp_loading_result = npc.load_subtensor(args, mp_sample_result)
 
         # fwd
         dp_batch_pred = training_model(dp_loading_result)
-        sp_batch_pred = tocheck_model(mp_loading_result)
+        mp_batch_pred = tocheck_model(mp_loading_result)
 
-        print(f"[Note]equal:{torch.all(torch.eq(dp_batch_pred, sp_batch_pred))}\t shape:{dp_batch_pred}\t {sp_batch_pred}")
-
-        assert False
-
-        for epoch in range(args.num_epochs):
-            epoch_tic_start = utils.get_time()
-            # t2 = utils.get_time()
-            bt2, t2 = utils.get_time_straggler()
-            total_loss = 0
-            # nvtx.range_push("Sampling")
-            for step, sample_result in enumerate(dataloader):
-                # t0 = utils.get_time()
-                bt0, t0 = utils.get_time_straggler()
-                # nvtx.range_pop()
-                # nvtx.range_push("Loading")
-
-                batch_labels = labels[sample_result[1]]
-                loading_result = npc.load_subtensor(args, sample_result)
-                # check feature loading
-                if args.debug:
-                    feat_dim_slice = (
-                        slice(
-                            args.cumsum_feat_dim[rank],
-                            args.cumsum_feat_dim[rank + 1],
-                            1,
-                        )
-                        if args.system == "MP"
-                        else slice(None)
-                    )
-
-                    debug_loading_result = debug_global_features[sample_result[0].to("cpu"), feat_dim_slice]
-                    debug_loading_flag = torch.all(torch.eq(loading_result[1].detach().cpu(), debug_loading_result))
-                    assert debug_loading_flag
-
-                # t1 = utils.get_time()
-                bt1, t1 = utils.get_time_straggler()
-                # nvtx.range_pop()
-                # nvtx.range_push("Training")
-
-                batch_pred = training_model(loading_result)
-                loss = F.cross_entropy(batch_pred, batch_labels)
-                if args.debug:
-                    total_loss += loss
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-                """
-                # accuracy
-                accuracy = MF.accuracy(batch_pred, batch_labels)
-                dist.all_reduce(loss)
-                dist.all_reduce(accuracy)
-                loss /= world_size
-                accuracy /= world_size
-                if rank == 0:
-                    print(
-                        f"[Note]Rank#{rank} epoch#{epoch},batch#{step} Loss: {loss:.3f}\t acc:{accuracy:.3f}")
-                """
-                ms_samping_time = 1000.0 * (t0 - t2)
-                # t2 = utils.get_time()
-                bt2, t2 = utils.get_time_straggler()
-                # prof.step()
-                # nvtx.range_pop()
-                # nvtx.range_push("Sampling")
-                ms_loading_time = 1000.0 * (t1 - t0)
-                ms_training_time = 1000.0 * (t2 - t1)
-
-                if epoch >= warmup_epochs:
-                    total_time[0] += ms_samping_time
-                    total_time[1] += ms_loading_time
-                    total_time[2] += ms_training_time
-
-                    # record mini-batches stage time
-                    """
-                    record_val = [
-                        ms_samping_time,
-                        # t0 - bt0,
-                        ms_loading_time,
-                        # t1 - bt1,
-                        ms_training_time,
-                        # t2 - bt2,
-                    ]
-                    record_list.append(record_val)
-                    """
-                if step >= LIMIT_BATCHES:
-                    break
-
-                t2 = utils.get_time()
-
-            epoch_tic_end = utils.get_time()
-            if not args.debug:
-                print(f"Rank: {rank} | Epoch: {epoch} | Epoch time: {epoch_tic_end - epoch_tic_start:.3f} s")
-
-            # evaluate
-            if args.debug:
-                acc = (
-                    utils.evaluate(
-                        args,
-                        training_model,
-                        labels,
-                        args.num_classes,
-                        val_dataloader,
-                    ).to(device)
-                    / world_size
-                )
-                dist.reduce(acc, 0)
-                if rank == 0:
-                    acc_str = "Epoch {:05d} | Loss {:.4f} | Accuracy {:.4f}\n".format(
-                        epoch,
-                        total_loss / (step + 1),
-                        acc.item(),
-                    )
-                    print(f"[Note]{acc_str}")
-                    acc_file.write(acc_str)
-
-        if args.debug and rank == 0:
-            acc_file.close()
-        if not args.debug and rank == 0 and args.num_epochs > 1:
-            avg_time_epoch_sampling = round(total_time[0] / num_record_epochs, 4)
-            avg_time_epoch_loading = round(total_time[1] / num_record_epochs, 4)
-            avg_time_epoch_training = round(total_time[2] / num_record_epochs, 4)
-
-            # write record to csv file
-            """
-            record_path = f"./logs/record/{args.tag}.csv"
-            with open(record_path, "a") as f:
-                writer = csv.writer(f, lineterminator="\n")
-                writer.writerows(record_list)
-            """
-
-            # cross-machine feature loading variance check
-            """
-            check_flag = True
-            fail_idx = []
-            for cid in range(3):
-                vals = [e[cid] for e in record_list]
-                variance = max(vals) / min(vals)
-                print(f"[Note]Checking Index{cid} variance:{variance}")
-                if variance > 2:
-                    check_flag = False
-                    fail_idx.append(cid)
-            
-            if not check_flag:
-                args.tag = f"variance{fail_idx}_{args.tag}"
-            """
-
-            with open(args.logs_dir, "a") as f:
-                writer = csv.writer(f, lineterminator="\n")
-                # Tag, System, Dataset, Model, Machines, local batch_size, fanout, cache_mode, cache_memory, cache_value, feat cache node, feat cache element, graph cache node, graph cache element, num_epochs, num batches per epoch, Sampling time, Loading time, Training time,
-                cache_memory = f"{round(args.cache_memory / (1024*1024*1024), 1)}GB"
-                cache_value = args.greedy_feat_ratio if args.cache_mode == "greedy" else args.tag.split("_")[-1]
-                avg_epoch_time = round(avg_time_epoch_sampling + avg_time_epoch_loading + avg_time_epoch_training, 2)
-                dataset_name = args.name.split("_")[0]
-                write_tag = f"{dataset_name}_{args.tag}"
-
-                log_info = [
-                    write_tag,
-                    # args.model,
-                    args.batch_size,
-                    args.input_dim,
-                    args.fan_out,
-                    args.cache_mode,
-                    cache_memory,
-                    cache_value,
-                    num_cached_feat_nodes,
-                    num_cached_feat_elements,
-                    num_cached_graph_nodes,
-                    num_cached_graph_elements,
-                    num_record_epochs,
-                    num_batches_per_epoch,
-                    round(avg_time_epoch_sampling, 2),
-                    round(avg_time_epoch_loading, 2),
-                    round(avg_time_epoch_training, 2),
-                    avg_epoch_time,
-                ]
-                writer.writerow(log_info)
+        print(f"[Note]equal:{torch.all(torch.eq(dp_batch_pred, mp_batch_pred))}\t shape:{dp_batch_pred}\t {mp_batch_pred}")
+        print(f"[Note]not equal:{dp_batch_pred[torch.ne(dp_batch_pred, mp_batch_pred)]}, {mp_batch_pred[torch.ne(dp_batch_pred, mp_batch_pred)]}")
     dist.barrier()
     utils.cleanup()
 

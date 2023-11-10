@@ -81,7 +81,7 @@ class DGLGCN(nn.Module):
             args.num_classes,
             activation,
             args.dropout,
-            norm_first_layer
+            norm_first_layer,
         )
 
     def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout, norm_first_layer):
@@ -109,7 +109,7 @@ class DGLGCN(nn.Module):
         ) = sampling_result
         h = x
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
-            h = layer(block, h)
+            h = layer(block, h, weight=torch.ones((self.in_feats, self.n_hidden), device=h.device))
             return h
             if l != len(self.layers) - 1:
                 h = self.activation(h)
