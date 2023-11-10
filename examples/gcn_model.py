@@ -72,7 +72,7 @@ class NPCGCN(nn.Module):
 
 
 class DGLGCN(nn.Module):
-    def __init__(self, args, activation=torch.relu):
+    def __init__(self, args, activation=torch.relu, norm_first_layer="none"):
         super().__init__()
         self.init(
             args.fan_out,
@@ -81,9 +81,10 @@ class DGLGCN(nn.Module):
             args.num_classes,
             activation,
             args.dropout,
+            norm_first_layer,
         )
 
-    def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout):
+    def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout, norm_first_layer):
         print(f"[Note]DGL GCN: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
@@ -92,7 +93,7 @@ class DGLGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm="none"))
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm=norm_first_layer))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
@@ -220,7 +221,7 @@ class MPGCN(nn.Module):
         self.n_workers = n_workers
         self.device = device
 
-        self.layers = nn.ModuleList()
+        self.bias = nn.Parameter(torch.Tensor(self.n_hidden))
 
         if self.n_layers > 1:
             # first mp layer
@@ -228,6 +229,7 @@ class MPGCN(nn.Module):
                 self.in_feats_list[self.rank],
                 self.n_hidden,
                 norm="none",
+                bias=False,
             ).to(self.device)
             # ddp
             ddp_config = SimpleConfig(
@@ -238,7 +240,7 @@ class MPGCN(nn.Module):
                 dropout=dropout,
             )
             self.ddp_modules = DDP(
-                DGLGCN(ddp_config).to(self.device),
+                DGLGCN(ddp_config, torch.relu, "both").to(self.device),
                 device_ids=[self.device],
                 output_device=self.device,
             )
@@ -248,6 +250,10 @@ class MPGCN(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.zeros_(self.bias)
 
     def forward(self, sampling_result):
         (
@@ -259,6 +265,7 @@ class MPGCN(nn.Module):
         h = x
         # fir mp layer
         h = self.mp_layers(blocks[0], h)
+        h = h + self.bias
         h = self.activation(h)
         h = self.dropout(h)
         # custom shuffle

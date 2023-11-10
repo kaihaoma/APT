@@ -18,7 +18,7 @@ TEST(AllReduce, AllReduce1) {
   auto total_send_size = torch::sum(send_size).item<IdType>();
   auto send = rank * torch::ones(total_send_size, options);
 
-  auto reduce_val = 1. * (world_size - 1) / 2;
+  auto reduce_val = 1. * (world_size - 1) * world_size / 2;
   auto res = torch::full(rank + 1, reduce_val, options);
   auto recv = torch::empty(rank + 1, options);
   npc::AllReduce(send, recv, send_size);
