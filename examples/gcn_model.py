@@ -92,13 +92,13 @@ class DGLGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm="none"))
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm="none", bias=False, activation=None))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
         else:
             self.layers.append(dglnn.GraphConv(in_feats, n_classes))
-        self.dropout = nn.Dropout(dropout)
+        # self.dropout = nn.Dropout(dropout)
         self.activation = activation
 
     def forward(self, sampling_result):
@@ -111,7 +111,9 @@ class DGLGCN(nn.Module):
             h = layer(block, h)
             if l != len(self.layers) - 1:
                 h = self.activation(h)
-                h = self.dropout(h)
+
+                return h
+                # h = self.dropout(h)
         return h
 
 
@@ -143,14 +145,14 @@ class SPGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(npc.SPGraphConv(in_feats, n_hidden, norm="none"))
+            self.layers.append(npc.SPGraphConv(in_feats, n_hidden, norm="none", bias=False, activation=None))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
         else:
             self.layers.append(dglnn.GraphConv(in_feats, n_classes))
         self.num_layers = len(self.layers)
-        self.dropout = nn.Dropout(dropout)
+        # self.dropout = nn.Dropout(dropout)
         self.activation = activation
 
     def forward(self, sampling_result):
@@ -164,13 +166,14 @@ class SPGCN(nn.Module):
         # layer 0
         h = self.layers[0](blocks[:2], h, fsi)
         h = self.activation(h)
-        h = self.dropout(h)
+        return h
+        # h = self.dropout(h)
         # layer 1~n-1
         for l, (layer, block) in enumerate(zip(self.layers[1:], blocks[2:])):
             h = layer(block, h)
             if l != self.num_layers - 2:
                 h = self.activation(h)
-                h = self.dropout(h)
+                # h = self.dropout(h)
         return h
 
 

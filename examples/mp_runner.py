@@ -59,7 +59,7 @@ if __name__ == "__main__":
     local_ranks = args.local_ranks
     print(f"[Note]procs:{nproc}\t world_size:{world_size}\t ranks:{ranks}\t local_ranks:{local_ranks}")
 
-    train_module = importlib.import_module("train")
+    train_module = importlib.import_module("train_copy")
     for inputs in get_pre_defined_args(args.tag):
         # for inputs in get_user_input(args.tag):
         for key, value in inputs.items():

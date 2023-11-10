@@ -220,8 +220,11 @@ def pre_spawn():
         graph = graph.remove_self_loop().add_self_loop()
         val_idx = dataset.val_idx
 
+        # NOTE temp set
+        print(f"[Note]args.min_vids:{args.min_vids}\t world_size:{args.world_size}")
         args.min_vids = [0, 2449029]
         args.world_size = 1
+        print(f"[Note]args.min_vids:{args.min_vids}\t world_size:{args.world_size}")
     else:
         dataset_tuple = dgl.load_graphs(args.graph_path)
         graph = dataset_tuple[0][0]
