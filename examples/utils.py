@@ -219,6 +219,9 @@ def pre_spawn():
         graph = dataset[0]
         graph = graph.remove_self_loop().add_self_loop()
         val_idx = dataset.val_idx
+
+        args.min_vids = [0, 2449029]
+        args.world_size = 1
     else:
         dataset_tuple = dgl.load_graphs(args.graph_path)
         graph = dataset_tuple[0][0]

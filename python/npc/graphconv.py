@@ -6,7 +6,7 @@ from typing import Tuple
 import dgl.function as fn
 import numpy as np
 
-from .ops import SPFeatureShuffle
+from .ops import SPFeatureShuffle, MPFeatureShuffle
 
 
 class SPGraphConv(nn.Module):
@@ -172,6 +172,9 @@ class MPGraphConv(nn.Module):
         self._out_feats = out_feats
         self._norm = norm
         self._allow_zero_in_degree = allow_zero_in_degree
+        
+        print(in_feats)
+        exit()
 
         if weight:
             self.weight = nn.Parameter(torch.Tensor(in_feats, out_feats))
@@ -193,36 +196,52 @@ class MPGraphConv(nn.Module):
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
-    def forward(self, graph, feat):
-        (
-            all_coo_row,
-            all_coo_col,
-            recv_frontier_size,
-            recv_coo_size,
-            recv_seed_size,
-        ) = graph
-        fanout = all_coo_row.numel() // recv_seed_size.sum().item()
-        frontier_offset = torch.cat([torch.tensor([0], device=recv_frontier_size.device), torch.cumsum(recv_frontier_size, dim=0)])
-        coo_offset = torch.cat([torch.tensor([0], device=recv_coo_size.device), torch.cumsum(recv_coo_size, dim=0)])
-        seed_offset = torch.cat([torch.tensor([0], device=recv_seed_size.device), torch.cumsum(recv_seed_size, dim=0)])
-        feat_src = feat
+    def forward(self, graph, feat, fsi):
+        # (
+        #     all_coo_row,
+        #     all_coo_col,
+        #     recv_frontier_size,
+        #     recv_coo_size,
+        #     recv_seed_size,
+        #     block,
+        # ) = graph
+        # fanout = all_coo_row.numel() // recv_seed_size.sum().item()
+        # frontier_offset = torch.cat([torch.tensor([0], device=recv_frontier_size.device), torch.cumsum(recv_frontier_size, dim=0)])
+        # coo_offset = torch.cat([torch.tensor([0], device=recv_coo_size.device), torch.cumsum(recv_coo_size, dim=0)])
+        # seed_offset = torch.cat([torch.tensor([0], device=recv_seed_size.device), torch.cumsum(recv_seed_size, dim=0)])
+        # feat_src = feat
 
-        if self._norm in ["left", "both"]:
-            if self._norm == "both":
-                norm = np.power(fanout, -0.5)
-            else:
-                norm = 1.0 / fanout
-            feat_src = feat_src * norm
+        # if self._norm in ["left", "both"]:
+        #     if self._norm == "both":
+        #         norm = np.power(fanout, -0.5)
+        #     else:
+        #         norm = 1.0 / fanout
+        #     feat_src = feat_src * norm
 
-        feat_src = torch.matmul(feat_src, self.weight)
-        rst = Aggregate.apply((all_coo_row, all_coo_col, coo_offset), feat_src, frontier_offset, seed_offset)
+        # feat_src = torch.matmul(feat_src, self.weight)
+        # # with block.local_scope():
+        # #     block.srcdata["h"] = feat_src
+        # #     # Message Passing
+        # #     block.update_all(fn.copy_u("h", "m"), fn.sum("m", "h"))
+        # #     rst = block.dstdata["h"]
+        # rst = Aggregate.apply((all_coo_row, all_coo_col, coo_offset), feat_src, frontier_offset, seed_offset)
 
-        if self._norm in ["right", "both"]:
-            if self._norm == "both":
-                norm = np.power(fanout, -0.5)
-            else:
-                norm = 1.0 / fanout
-            rst = rst * norm
+        # if self._norm in ["right", "both"]:
+        #     if self._norm == "both":
+        #         norm = np.power(fanout, -0.5)
+        #     else:
+        #         norm = 1.0 / fanout
+        #     rst = rst * norm
+
+        feat_src = torch.matmul(feat, self.weight)
+        feat_src = MPFeatureShuffle.apply(fsi, feat_src)
+        feat_dst = feat_src[: graph.number_of_dst_nodes()]
+
+        with graph.local_scope():
+            graph.srcdata["h"] = feat_src
+            # Message Passing
+            graph.update_all(fn.copy_u("h", "m"), fn.sum("m", "h"))
+            rst = graph.dstdata["h"]
 
         if self.bias is not None:
             rst = rst + self.bias

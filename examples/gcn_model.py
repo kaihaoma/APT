@@ -220,7 +220,7 @@ class MPGCN(nn.Module):
         self.n_workers = n_workers
         self.device = device
 
-        self.layers = nn.ModuleList()
+        self.bias = nn.Parameter(torch.Tensor(self.n_hidden))
 
         if self.n_layers > 1:
             # first mp layer
@@ -228,6 +228,7 @@ class MPGCN(nn.Module):
                 self.in_feats_list[self.rank],
                 self.n_hidden,
                 norm="none",
+                bias=False,
             ).to(self.device)
             # ddp
             ddp_config = SimpleConfig(
@@ -242,12 +243,15 @@ class MPGCN(nn.Module):
                 device_ids=[self.device],
                 output_device=self.device,
             )
-
         else:
             raise NotImplementedError
 
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.zeros_(self.bias)
 
     def forward(self, sampling_result):
         (
@@ -258,12 +262,12 @@ class MPGCN(nn.Module):
 
         h = x
         # fir mp layer
-        h = self.mp_layers(blocks[0], h)
+        h = self.mp_layers(blocks[0], h, fsi)
+        # custom shuffle
+        # h = npc.MPFeatureShuffle.apply(fsi, h)
+        h = h + self.bias
         h = self.activation(h)
         h = self.dropout(h)
-        # custom shuffle
-        h = npc.MPFeatureShuffle.apply(fsi, h)
 
         h = self.ddp_modules((blocks[1:], h))
-
         return h

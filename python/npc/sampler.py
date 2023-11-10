@@ -269,12 +269,12 @@ class MixedPSNeighborSampler(object):
                         seeds = torch.cat((seeds, unique_src))
 
                 elif self.system == "MP":
-                    if self.model == "GAT":
-                        block, (coo_row, coo_col) = create_dgl_block(seeds, neighbors, fanout, True)
-                        unique_frontier = block.srcdata["_ID"]
-                        send_frontier_size = torch.tensor([unique_frontier.numel()])
-                    else:
-                        unique_frontier, coo_row = tensor_relabel_csc(seeds, neighbors)
+                    # if self.model == "GAT":
+                    block, (coo_row, coo_col) = create_dgl_block(seeds, neighbors, fanout, True)
+                    unique_frontier = block.srcdata["_ID"]
+                    send_frontier_size = torch.tensor([unique_frontier.numel()])
+                    # else:
+                    #     unique_frontier, coo_row = tensor_relabel_csc(seeds, neighbors)
 
                     (
                         all_frontier,
@@ -285,13 +285,23 @@ class MixedPSNeighborSampler(object):
                         recv_coo_size,
                     ) = mp_sample_shuffle(seeds, unique_frontier, coo_row)
 
-                    if self.model == "GAT":
-                        blocks.insert(0, block)
-                        sampling_result = (send_frontier_size, recv_frontier_size)
-                    else:
-                        all_coo_col = torch.cat([torch.arange(0, i, device=all_coo_row.device).repeat_interleave(fanout) for i in recv_size])
-                        blocks.insert(0, (all_coo_row, all_coo_col, recv_frontier_size, recv_coo_size, recv_size))
-                        sampling_result = (send_size, recv_size)
+                    # if self.model == "GAT":
+                    blocks.insert(0, block)
+                    sampling_result = (send_frontier_size, recv_frontier_size)
+                    # else:
+                    #     all_coo_col = torch.cat([torch.arange(0, i, device=all_coo_row.device).repeat_interleave(fanout) for i in recv_size])
+
+                    #     # coo_offset = torch.cat([torch.tensor([0], device=recv_coo_size.device), torch.cumsum(recv_coo_size, dim=0)])
+                    #     # frontier_offset = torch.cat([torch.tensor([0], device=recv_frontier_size.device), torch.cumsum(recv_frontier_size, dim=0)])
+                    #     # all_coo_row_new = torch.cat(
+                    #     #     [all_coo_row[coo_offset[i] : coo_offset[i + 1]] + frontier_offset[i] for i in range(coo_offset.numel() - 1)]
+                    #     # )
+                    #     # all_coo_col = torch.arange(0, recv_size.sum().item(), device=all_coo_row.device).repeat_interleave(fanout)
+                    #     block = create_block_from_coo(all_coo_row, all_coo_col, all_frontier.numel(), recv_size.sum().item())
+                    #     # print(all_coo_row_new.max(), all_frontier.numel())
+
+                    #     blocks.insert(0, (all_coo_row, all_coo_col, recv_frontier_size, recv_coo_size, recv_size, block))
+                    #     sampling_result = (send_size, recv_size)
                     seeds = all_frontier
 
             if layer_id != self.num_layers - 1 or self.system not in ("SP", "MP"):
