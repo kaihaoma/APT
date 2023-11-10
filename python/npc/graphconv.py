@@ -30,7 +30,10 @@ class SPGraphConv(nn.Module):
         self._allow_zero_in_degree = allow_zero_in_degree
 
         if weight:
-            self.weight = nn.Parameter(torch.Tensor(in_feats, out_feats))
+            if torch.is_tensor(weight):
+                self.weight = nn.Parameter(weight)
+            else:
+                self.weight = nn.Parameter(torch.Tensor(in_feats, out_feats))
         else:
             self.register_parameter("weight", None)
 
@@ -80,6 +83,7 @@ class SPGraphConv(nn.Module):
                 feat_src = feat_src * norm
 
             # mult W first to reduce the feature size for aggregation.
+
             feat_src = torch.matmul(feat_src, self.weight)
             graph.srcdata["h"] = feat_src
             graph.update_all(fn.copy_u("h", "m"), fn.sum(msg="m", out="h"))
@@ -134,6 +138,7 @@ class SPGraphConv(nn.Module):
 
             if self._activation is not None:
                 rst = self._activation(rst)
+
             return rst
 
 
