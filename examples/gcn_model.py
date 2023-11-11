@@ -95,12 +95,12 @@ class DGLGCN(nn.Module):
         if self.n_layers > 1:
             self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm=norm_first_layer, bias=False, activation=None, weight=False))
             for i in range(1, self.n_layers - 1):
-                self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
-            self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
+                self.layers.append(dglnn.GraphConv(n_hidden, n_hidden, bias=False, activation=None, weight=False))
+            self.layers.append(dglnn.GraphConv(n_hidden, n_classes, bias=False, activation=None, weight=False))
         else:
-            self.layers.append(dglnn.GraphConv(in_feats, n_classes))
-        self.dropout = nn.Dropout(dropout)
-        self.activation = activation
+            self.layers.append(dglnn.GraphConv(in_feats, n_classes, bias=False, activation=None, weight=False))
+        # self.dropout = nn.Dropout(dropout)
+        # self.activation = activation
 
     def forward(self, sampling_result):
         (
@@ -109,11 +109,15 @@ class DGLGCN(nn.Module):
         ) = sampling_result
         h = x
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
-            h = layer(block, h, weight=torch.ones((self.in_feats, self.n_hidden), device=h.device))
-            return h
-            if l != len(self.layers) - 1:
-                h = self.activation(h)
-                h = self.dropout(h)
+            if l == 0:
+                h = layer(block, h, weight=torch.ones((self.in_feats, self.n_hidden), device=h.device))
+            elif l == self.n_layers - 1:
+                h = layer(block, h, weight=torch.ones((self.n_hidden, self.n_classes), device=h.device))
+            else:
+                h = layer(block, h, weight=torch.ones((self.n_hidden, self.n_hidden), device=h.device))
+            # if l != len(self.layers) - 1:
+            # h = self.activation(h)
+            # h = self.dropout(h)
         return h
 
 
@@ -223,7 +227,7 @@ class MPGCN(nn.Module):
         self.n_workers = n_workers
         self.device = device
 
-        self.bias = nn.Parameter(torch.Tensor(self.n_hidden))
+        # self.bias = nn.Parameter(torch.Tensor(self.n_hidden))
 
         if self.n_layers > 1:
             # first mp layer
@@ -241,20 +245,21 @@ class MPGCN(nn.Module):
                 num_classes=n_classes,
                 dropout=dropout,
             )
-            self.ddp_modules = DDP(
-                DGLGCN(ddp_config, torch.relu, "both").to(self.device),
-                device_ids=[self.device],
-                output_device=self.device,
-            )
+            # self.ddp_modules = DDP(
+            #     DGLGCN(ddp_config, torch.relu, "both").to(self.device),
+            #     device_ids=[self.device],
+            #     output_device=self.device,
+            # )
+            self.ddp_modules = DGLGCN(ddp_config, torch.relu, "both").to(self.device)
         else:
             raise NotImplementedError
 
-        self.dropout = nn.Dropout(dropout)
-        self.activation = activation
-        self.reset_parameters()
+        # self.dropout = nn.Dropout(dropout)
+        # self.activation = activation
+        # self.reset_parameters()
 
-    def reset_parameters(self):
-        nn.init.zeros_(self.bias)
+    # def reset_parameters(self):
+    #     nn.init.zeros_(self.bias)
 
     def forward(self, sampling_result):
         (
@@ -266,12 +271,10 @@ class MPGCN(nn.Module):
         h = x
         # fir mp layer
         h = self.mp_layers(blocks[0], h, fsi)
-        return h
         # custom shuffle
-        # h = npc.MPFeatureShuffle.apply(fsi, h)
-        h = h + self.bias
-        h = self.activation(h)
-        h = self.dropout(h)
+        # h = h + self.bias
+        # h = self.activation(h)
+        # h = self.dropout(h)
 
         h = self.ddp_modules((blocks[1:], h))
         return h

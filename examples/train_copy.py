@@ -58,6 +58,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
     train_nid = partition_data.train_nid
     min_vids = partition_data.min_vids
+    labels = partition_data.labels
 
     # define define sampler dataloader
     if args.debug:
@@ -88,6 +89,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         debug_info=(debug_graph, debug_min_vids, num_nodes) if args.debug else None,
     )
 
+    args.batch_size = 1
     fake_graph = dgl.rand_graph(1, 1)
     dataloader = dgl.dataloading.DataLoader(
         graph=fake_graph,
@@ -121,7 +123,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
     # define model
     training_model = DGLGCN(args=args, activation=torch.relu).to(device)
     print(f"[Note] {args.system} training model: {type(training_model)}")
-    training_model = DDP(training_model, device_ids=[device], output_device=device)
+    # training_model = DDP(training_model, device_ids=[device], output_device=device)
 
     print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
     dist.barrier()
@@ -154,6 +156,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         tocheck_sample_result = tocheck_sampler.sample(None, sample_result[1])
         dp_sample_result = tocheck_sample_result[:3]
         mp_sample_result = tocheck_sample_result[3:]
+        batch_labels = labels[sample_result[1]]
 
         # feature loading
         args.system = "DP"
@@ -169,8 +172,14 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         dp_batch_pred = training_model(dp_loading_result)
         mp_batch_pred = tocheck_model(mp_loading_result)
 
-        print(f"[Note]equal:{torch.all(torch.eq(dp_batch_pred, mp_batch_pred))}\t shape:{dp_batch_pred}\t {mp_batch_pred}")
-        print(f"[Note]not equal:{dp_batch_pred[torch.ne(dp_batch_pred, mp_batch_pred)]}, {mp_batch_pred[torch.ne(dp_batch_pred, mp_batch_pred)]}")
+        dp_loss = F.cross_entropy(dp_batch_pred, batch_labels)
+        mp_loss = F.cross_entropy(mp_batch_pred, batch_labels)
+
+        # dp_loss.backward()
+        mp_loss.backward()
+
+        print(f"[Note]equal:{torch.allclose(dp_batch_pred, mp_batch_pred)}\t shape:{dp_batch_pred}\t {mp_batch_pred}")
+        print(f"[Note]loss:{dp_loss}\t {mp_loss}")
     dist.barrier()
     utils.cleanup()
 
