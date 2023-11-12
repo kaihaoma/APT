@@ -158,7 +158,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         else:
             raise ValueError(f"Invalid system:{args.system}")
     elif args.model == "GAT":
-        heads = [4] * len(args.fan_out)
+        heads = [args.num_heads] * len(args.fan_out)
         if args.system == "DP":
             training_model = DGLGAT(
                 args=args,

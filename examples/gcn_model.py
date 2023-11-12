@@ -72,7 +72,7 @@ class NPCGCN(nn.Module):
 
 
 class DGLGCN(nn.Module):
-    def __init__(self, args, activation=torch.relu, norm_first_layer="none"):
+    def __init__(self, args, activation=torch.relu):
         super().__init__()
         self.init(
             args.fan_out,
@@ -81,10 +81,17 @@ class DGLGCN(nn.Module):
             args.num_classes,
             activation,
             args.dropout,
-            norm_first_layer,
         )
 
-    def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout, norm_first_layer):
+    def init(
+        self,
+        fan_out,
+        in_feats,
+        n_hidden,
+        n_classes,
+        activation,
+        dropout,
+    ):
         print(f"[Note]DGL GCN: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
@@ -93,7 +100,7 @@ class DGLGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm=norm_first_layer))
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm="none"))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
@@ -110,7 +117,7 @@ class DGLGCN(nn.Module):
         h = x
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
             h = layer(block, h)
-            if l != len(self.layers) - 1:
+            if l != self.n_layers - 1:
                 h = self.activation(h)
                 h = self.dropout(h)
         return h
@@ -150,7 +157,6 @@ class SPGCN(nn.Module):
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
         else:
             self.layers.append(dglnn.GraphConv(in_feats, n_classes))
-        self.num_layers = len(self.layers)
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
 
@@ -169,7 +175,7 @@ class SPGCN(nn.Module):
         # layer 1~n-1
         for l, (layer, block) in enumerate(zip(self.layers[1:], blocks[2:])):
             h = layer(block, h)
-            if l != self.num_layers - 2:
+            if l != self.n_layers - 2:
                 h = self.activation(h)
                 h = self.dropout(h)
         return h
@@ -182,6 +188,65 @@ class SimpleConfig:
 
 # MODEL PARA
 # wrap Data Parallel
+class MPDDP(nn.Module):
+    def __init__(self, args, activation=torch.relu):
+        super().__init__()
+        self.init(
+            args.fan_out,
+            args.input_dim,
+            args.num_hidden,
+            args.num_classes,
+            activation,
+            args.dropout,
+        )
+
+    def init(
+        self,
+        fan_out,
+        in_feats,
+        n_hidden,
+        n_classes,
+        activation,
+        dropout,
+    ):
+        self.fan_out = fan_out
+        self.n_layers = len(fan_out)
+        self.in_feats = in_feats
+        self.n_hidden = n_hidden
+        self.n_classes = n_classes
+        self.bias = nn.Parameter(torch.Tensor(in_feats))
+        self.layers = nn.ModuleList()
+        if self.n_layers > 1:
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden))
+            for i in range(1, self.n_layers - 1):
+                self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
+            self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
+        else:
+            self.layers.append(dglnn.GraphConv(in_feats, n_classes))
+        self.dropout = nn.Dropout(dropout)
+        self.activation = activation
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.zeros_(self.bias)
+
+    def forward(self, sampling_result):
+        (
+            blocks,
+            x,
+        ) = sampling_result
+        h = x
+        h = h + self.bias
+        h = self.activation(h)
+        h = self.dropout(h)
+        for l, (layer, block) in enumerate(zip(self.layers, blocks)):
+            h = layer(block, h)
+            if l != self.n_layers - 1:
+                h = self.activation(h)
+                h = self.dropout(h)
+        return h
+
+
 class MPGCN(nn.Module):
     def __init__(self, args, activation=torch.relu):
         super().__init__()
@@ -221,8 +286,6 @@ class MPGCN(nn.Module):
         self.n_workers = n_workers
         self.device = device
 
-        self.bias = nn.Parameter(torch.Tensor(self.n_hidden))
-
         if self.n_layers > 1:
             # first mp layer
             self.mp_layers = npc.MPGraphConv(
@@ -240,7 +303,7 @@ class MPGCN(nn.Module):
                 dropout=dropout,
             )
             self.ddp_modules = DDP(
-                DGLGCN(ddp_config, torch.relu, "both").to(self.device),
+                MPDDP(ddp_config).to(self.device),
                 device_ids=[self.device],
                 output_device=self.device,
             )
@@ -250,10 +313,6 @@ class MPGCN(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        nn.init.zeros_(self.bias)
 
     def forward(self, sampling_result):
         (
@@ -265,12 +324,8 @@ class MPGCN(nn.Module):
         h = x
         # fir mp layer
         h = self.mp_layers(blocks[0], h)
-        h = h + self.bias
-        h = self.activation(h)
-        h = self.dropout(h)
         # custom shuffle
         h = npc.MPFeatureShuffle.apply(fsi, h)
 
         h = self.ddp_modules((blocks[1:], h))
-
         return h

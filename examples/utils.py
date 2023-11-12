@@ -303,6 +303,7 @@ def init_args(args=None) -> argparse.Namespace:
     parser.add_argument("--input_dim", type=int, default=100, help="input dimension")
     parser.add_argument("--num_classes", type=int, default=47, help="number of node classes")
     parser.add_argument("--num_hidden", type=int, default=16, help="size of hidden dimension")
+    parser.add_argument("--num_heads", type=int, default=8, help="number of attention heads, only for GAT")
     parser.add_argument("--world_size", type=int, default=4, help="number of workers")
     parser.add_argument("--warmup_epochs", type=int, default=3)
     parser.add_argument("--training_mode", type=str, default="training", choices=["training", "sampling"])

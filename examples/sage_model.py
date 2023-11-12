@@ -83,7 +83,15 @@ class DGLSAGE(nn.Module):
             args.dropout,
         )
 
-    def init(self, fan_out, in_feats, n_hidden, n_classes, activation, dropout):
+    def init(
+        self,
+        fan_out,
+        in_feats,
+        n_hidden,
+        n_classes,
+        activation,
+        dropout,
+    ):
         print(f"[Note]DGL SAGE: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
@@ -149,7 +157,6 @@ class SPSAGE(nn.Module):
             self.layers.append(dglnn.SAGEConv(n_hidden, n_classes, "mean"))
         else:
             self.layers.append(dglnn.SAGEConv(in_feats, n_classes, "mean"))
-        self.num_layers = len(self.layers)
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
 
@@ -168,7 +175,7 @@ class SPSAGE(nn.Module):
         # layer 1~n-1
         for l, (layer, block) in enumerate(zip(self.layers[1:], blocks[2:])):
             h = layer(block, h)
-            if l != self.num_layers - 2:
+            if l != self.n_layers - 2:
                 h = self.activation(h)
                 h = self.dropout(h)
         return h
@@ -181,6 +188,65 @@ class SimpleConfig:
 
 # MODEL PARA
 # wrap Data Parallel
+class MPDDP(nn.Module):
+    def __init__(self, args, activation=torch.relu):
+        super().__init__()
+        self.init(
+            args.fan_out,
+            args.input_dim,
+            args.num_hidden,
+            args.num_classes,
+            activation,
+            args.dropout,
+        )
+
+    def init(
+        self,
+        fan_out,
+        in_feats,
+        n_hidden,
+        n_classes,
+        activation,
+        dropout,
+    ):
+        self.fan_out = fan_out
+        self.n_layers = len(fan_out)
+        self.in_feats = in_feats
+        self.n_hidden = n_hidden
+        self.n_classes = n_classes
+        self.bias = nn.Parameter(torch.Tensor(in_feats))
+        self.layers = nn.ModuleList()
+        if self.n_layers > 1:
+            self.layers.append(dglnn.SAGEConv(in_feats, n_hidden, "mean"))
+            for i in range(1, self.n_layers - 1):
+                self.layers.append(dglnn.SAGEConv(n_hidden, n_hidden, "mean"))
+            self.layers.append(dglnn.SAGEConv(n_hidden, n_classes, "mean"))
+        else:
+            self.layers.append(dglnn.SAGEConv(in_feats, n_classes, "mean"))
+        self.dropout = nn.Dropout(dropout)
+        self.activation = activation
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.zeros_(self.bias)
+
+    def forward(self, sampling_result):
+        (
+            blocks,
+            x,
+        ) = sampling_result
+        h = x
+        h = h + self.bias
+        h = self.activation(h)
+        h = self.dropout(h)
+        for l, (layer, block) in enumerate(zip(self.layers, blocks)):
+            h = layer(block, h)
+            if l != self.n_layers - 1:
+                h = self.activation(h)
+                h = self.dropout(h)
+        return h
+
+
 class MPSAGE(nn.Module):
     def __init__(self, args, activation=torch.relu):
         super().__init__()
@@ -220,19 +286,13 @@ class MPSAGE(nn.Module):
         self.n_workers = n_workers
         self.device = device
 
-        self.layers = nn.ModuleList()
-
         if self.n_layers > 1:
             # first mp layer
-            # self.mp_layers = dglnn.SAGEConv(
-            #     self.in_feats_list[self.rank],
-            #     self.n_hidden,
-            #     "mean",
-            # ).to(self.device)
             self.mp_layers = npc.MPSAGEConv(
                 self.in_feats_list[self.rank],
                 self.n_hidden,
-                "mean",
+                aggregator_type="mean",
+                bias=False,
             ).to(self.device)
             # ddp
             ddp_config = SimpleConfig(
@@ -243,7 +303,7 @@ class MPSAGE(nn.Module):
                 dropout=dropout,
             )
             self.ddp_modules = DDP(
-                DGLSAGE(ddp_config).to(self.device),
+                MPDDP(ddp_config).to(self.device),
                 device_ids=[self.device],
                 output_device=self.device,
             )
@@ -264,11 +324,8 @@ class MPSAGE(nn.Module):
         h = x
         # fir mp layer
         h = self.mp_layers(blocks[0], h)
-        h = self.activation(h)
-        h = self.dropout(h)
         # custom shuffle
         h = npc.MPFeatureShuffle.apply(fsi, h)
 
         h = self.ddp_modules((blocks[1:], h))
-
         return h
