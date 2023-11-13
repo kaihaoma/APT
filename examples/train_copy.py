@@ -123,7 +123,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
     # define model
     training_model = DGLGCN(args=args, activation=torch.relu).to(device)
     print(f"[Note] {args.system} training model: {type(training_model)}")
-    # training_model = DDP(training_model, device_ids=[device], output_device=device)
+    training_model = DDP(training_model, device_ids=[device], output_device=device)
 
     print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
     dist.barrier()
@@ -142,6 +142,19 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
             args=args,
             activation=torch.relu,
         ).to(device)
+        tocheck_model.mp_layers.weight.data = (
+            training_model.module.layers[0].weight.clone().detach()[args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1]]
+        )
+        tocheck_model.ddp_modules.module.layers[0].weight.data = training_model.module.layers[1].weight.clone().detach()
+        tocheck_model.ddp_modules.module.layers[1].weight.data = training_model.module.layers[2].weight.clone().detach()
+
+        # check training model
+        if rank == 0:
+            for name, param in training_model.named_parameters():
+                print(f"[Note]name:{name}\t shape:{param.shape}\t dev:{param.device}")
+            for name, param in tocheck_model.named_parameters():
+                print(f"[Note]name:{name}\t shape:{param.shape}\t dev:{param.device}")
+
         tocheck_sampler = npc.RefSampler(
             rank=rank,
             world_size=world_size,
@@ -175,11 +188,24 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         dp_loss = F.cross_entropy(dp_batch_pred, batch_labels)
         mp_loss = F.cross_entropy(mp_batch_pred, batch_labels)
 
-        # dp_loss.backward()
+        dp_loss.backward()
         mp_loss.backward()
 
-        print(f"[Note]equal:{torch.allclose(dp_batch_pred, mp_batch_pred)}\t shape:{dp_batch_pred}\t {mp_batch_pred}")
-        print(f"[Note]loss:{dp_loss}\t {mp_loss}")
+        grad = training_model.module.layers[0].weight.grad.data.clone().detach()
+        dist.all_reduce(grad)
+        grad = grad / args.world_size
+
+        # data1 = tocheck_model.ddp_modules.module.layers[1].weight.grad.data
+        # data2 = training_model.module.layers[2].weight.grad.data
+        data1 = tocheck_model.mp_layers.weight.grad.data
+        data2 = grad[args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1]]
+        # print(
+        #     f"[Note]rank:{rank}, equal:{torch.allclose(tocheck_model.ddp_modules.module.layers[0].weight.grad.data, training_model.module.layers[1].weight.grad.data)}\t"
+        # )
+        print(f"[Note]rank:{rank}, equal:{torch.allclose(data1, data2)}\t, {data1}\t {data2}\t")
+
+        # print(f"[Note]equal:{torch.allclose(dp_batch_pred, mp_batch_pred)}\t shape:{dp_batch_pred}\t {mp_batch_pred}")
+        # print(f"[Note]loss:{dp_loss}\t {mp_loss}")
     dist.barrier()
     utils.cleanup()
 

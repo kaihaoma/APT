@@ -93,12 +93,12 @@ class DGLGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm=norm_first_layer, bias=False, activation=None, weight=False))
+            self.layers.append(dglnn.GraphConv(in_feats, n_hidden, norm=norm_first_layer, bias=False, activation=None))
             for i in range(1, self.n_layers - 1):
-                self.layers.append(dglnn.GraphConv(n_hidden, n_hidden, bias=False, activation=None, weight=False))
-            self.layers.append(dglnn.GraphConv(n_hidden, n_classes, bias=False, activation=None, weight=False))
+                self.layers.append(dglnn.GraphConv(n_hidden, n_hidden, bias=False, activation=None))
+            self.layers.append(dglnn.GraphConv(n_hidden, n_classes, bias=False, activation=None))
         else:
-            self.layers.append(dglnn.GraphConv(in_feats, n_classes, bias=False, activation=None, weight=False))
+            self.layers.append(dglnn.GraphConv(in_feats, n_classes, bias=False, activation=None))
         # self.dropout = nn.Dropout(dropout)
         # self.activation = activation
 
@@ -109,12 +109,7 @@ class DGLGCN(nn.Module):
         ) = sampling_result
         h = x
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
-            if l == 0:
-                h = layer(block, h, weight=torch.ones((self.in_feats, self.n_hidden), device=h.device))
-            elif l == self.n_layers - 1:
-                h = layer(block, h, weight=torch.ones((self.n_hidden, self.n_classes), device=h.device))
-            else:
-                h = layer(block, h, weight=torch.ones((self.n_hidden, self.n_hidden), device=h.device))
+            h = layer(block, h)
             # if l != len(self.layers) - 1:
             # h = self.activation(h)
             # h = self.dropout(h)
@@ -245,12 +240,12 @@ class MPGCN(nn.Module):
                 num_classes=n_classes,
                 dropout=dropout,
             )
-            # self.ddp_modules = DDP(
-            #     DGLGCN(ddp_config, torch.relu, "both").to(self.device),
-            #     device_ids=[self.device],
-            #     output_device=self.device,
-            # )
-            self.ddp_modules = DGLGCN(ddp_config, torch.relu, "both").to(self.device)
+            self.ddp_modules = DDP(
+                DGLGCN(ddp_config, torch.relu, "both").to(self.device),
+                device_ids=[self.device],
+                output_device=self.device,
+            )
+            # self.ddp_modules = DGLGCN(ddp_config, torch.relu, "both").to(self.device)
         else:
             raise NotImplementedError
 
