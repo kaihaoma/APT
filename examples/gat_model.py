@@ -272,7 +272,7 @@ class SimpleConfig:
 
 # MODEL PARA
 # wrap Data Parallel
-class MPGAT(nn.Module):
+class MPDDP(nn.Module):
     def __init__(self, args, heads, activation=F.elu):
         super().__init__()
         self.init(
@@ -317,15 +317,16 @@ class MPGAT(nn.Module):
 
         if self.n_layers > 1:
             # first mp layer
-            self.mp_layers = npc.MPGATConv(
-                self.in_feats_list[self.rank],
-                n_hidden,
-                heads[0],
-                feat_drop=dropout,
-                attn_drop=dropout,
-                activation=activation,
-            ).to(self.device)
-            # ddp
+            self.layers.append(
+                npc.MPGATConv(
+                    self.in_feats_list[self.rank],
+                    n_hidden,
+                    heads[0],
+                    feat_drop=dropout,
+                    attn_drop=dropout,
+                    activation=activation,
+                )
+            )
             ddp_config = SimpleConfig(
                 fan_out=fan_out[:-1],
                 input_dim=n_hidden * heads[0],
@@ -333,17 +334,48 @@ class MPGAT(nn.Module):
                 num_classes=n_classes,
                 dropout=dropout,
             )
-            self.ddp_modules = DDP(
-                DGLGAT(ddp_config, heads[1:], F.elu).to(self.device),
-                device_ids=[self.device],
-                output_device=self.device,
+            self.layers.append(
+                DGLGAT(
+                    ddp_config,
+                    heads=heads[1:],
+                    activation=activation,
+                )
             )
-
         else:
             raise NotImplementedError
 
         self.dropout = nn.Dropout(dropout)
         self.activation = activation
+
+    def forward(self, blocks, x):
+        h = x
+        # fir mp layer
+        h = self.layers[0](blocks[0], h)
+        h = h.flatten(1)
+        h = self.layers[1]((blocks[1:], h))
+        return h
+
+
+class MPGAT(nn.Module):
+    def __init__(self, args, heads, activation=F.elu):
+        super().__init__()
+        self.n_hidden = args.num_hidden
+        self.heads = heads
+        self.device = args.device
+        
+        self.fc = nn.Linear(args.mp_input_dim_list[args.rank], args.num_hidden * heads[0], bias=False)
+
+        self.ddp_modules = DDP(
+            MPDDP(args, heads, activation).to(self.device),
+            device_ids=[self.device],
+            output_device=self.device,
+        )
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        gain = nn.init.calculate_gain("relu")
+        nn.init.xavier_normal_(self.fc.weight, gain=gain)
 
     def forward(self, sampling_result):
         (
@@ -353,9 +385,9 @@ class MPGAT(nn.Module):
         ) = sampling_result
 
         h = x
-        # fir mp layer
-        h = self.mp_layers(blocks[0], h, fsi)
-        h = h.flatten(1)
+        h = self.fc(h)
+        fsi.feat_dim = self.heads[0] * self.n_hidden
+        h = npc.MPFeatureShuffle.apply(fsi, h)
 
-        h = self.ddp_modules((blocks[1:], h))
+        h = self.ddp_modules(blocks, h)
         return h

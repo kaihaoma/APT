@@ -303,16 +303,13 @@ class MPGCN(nn.Module):
                 dropout=dropout,
             )
             self.ddp_modules = DDP(
-                MPDDP(ddp_config).to(self.device),
+                MPDDP(ddp_config, activation).to(self.device),
                 device_ids=[self.device],
                 output_device=self.device,
             )
 
         else:
             raise NotImplementedError
-
-        self.dropout = nn.Dropout(dropout)
-        self.activation = activation
 
     def forward(self, sampling_result):
         (

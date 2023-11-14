@@ -144,7 +144,6 @@ class MPGATConv(nn.Module):
         self._in_src_feats, self._in_dst_feats = in_feats, in_feats
         self._out_feats = out_feats
         self._allow_zero_in_degree = allow_zero_in_degree
-        self.fc = nn.Linear(self._in_src_feats, out_feats * num_heads, bias=False)
         self.attn_l = nn.Parameter(torch.FloatTensor(size=(1, num_heads, out_feats)))
         self.attn_r = nn.Parameter(torch.FloatTensor(size=(1, num_heads, out_feats)))
         self.feat_drop = nn.Dropout(feat_drop)
@@ -169,11 +168,6 @@ class MPGATConv(nn.Module):
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain("relu")
-        if hasattr(self, "fc"):
-            nn.init.xavier_normal_(self.fc.weight, gain=gain)
-        else:
-            nn.init.xavier_normal_(self.fc_src.weight, gain=gain)
-            nn.init.xavier_normal_(self.fc_dst.weight, gain=gain)
         nn.init.xavier_normal_(self.attn_l, gain=gain)
         nn.init.xavier_normal_(self.attn_r, gain=gain)
         if self.has_explicit_bias:
@@ -183,7 +177,7 @@ class MPGATConv(nn.Module):
             if self.res_fc.bias is not None:
                 nn.init.constant_(self.res_fc.bias, 0)
 
-    def forward(self, graph, feat, fsi: MPFeatureShuffleInfo, edge_weight=None):
+    def forward(self, graph, feat, edge_weight=None):
         with graph.local_scope():
             if not self._allow_zero_in_degree:
                 if (graph.in_degrees() == 0).any():
@@ -198,15 +192,10 @@ class MPGATConv(nn.Module):
                         "to be `True` when constructing this module will "
                         "suppress the check and let the code run."
                     )
-        h_src = self.feat_drop(feat)
-        feat_src = self.fc(h_src)
 
-        fsi.feat_dim = self._num_heads * self._out_feats
-        feat_src = MPFeatureShuffle.apply(fsi, feat_src)
-
-        src_prefix_shape = dst_prefix_shape = feat_src.shape[:-1]
+        src_prefix_shape = dst_prefix_shape = feat.shape[:-1]
         dst_prefix_shape = (graph.number_of_dst_nodes(),) + dst_prefix_shape[1:]
-        feat_src = feat_src.view(*src_prefix_shape, self._num_heads, self._out_feats)
+        feat_src = feat.view(*src_prefix_shape, self._num_heads, self._out_feats)
         feat_dst = feat_src[: graph.number_of_dst_nodes()]
 
         with graph.local_scope():

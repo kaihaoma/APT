@@ -9,7 +9,8 @@ def get_pre_defined_args(tag_prefix):
     num_try_times = 1
     cache_memory_in_gbs = [1]
     # cache_memory_in_gbs = list(range(6))
-    system = ["MP"]
+    system = ["DP", "NP", "SP", "MP"]
+    models = ["SAGE", "GCN", "GAT"]
     # num_localnode_feats_in_workers = list(range(4, 8))
     num_localnode_feats_in_workers = [-1]
     # generate args
@@ -17,18 +18,20 @@ def get_pre_defined_args(tag_prefix):
     for try_times in range(num_try_times):
         for nl in num_localnode_feats_in_workers:
             for sys in system:
-                for cache_mem in cache_memory_in_gbs:
-                    cm = cache_mem * 1024 * 1024 * 1024
-                    # cross-machine feat loading case
-                    tag = f"t{try_times}_{sys}_nl{nl}of8_cm{cache_mem}GB"
-                    # single-machine case
-                    # tag = f"{tag_prefix}_{sys}_cm{cache_mem}GB"
-                    yield {"system": sys, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
+                for model in models:
+                    for cache_mem in cache_memory_in_gbs:
+                        cm = cache_mem * 1024 * 1024 * 1024
+                        # cross-machine feat loading case
+                        tag = f"t{try_times}_{sys}_{model}_nl{nl}of8_cm{cache_mem}GB"
+                        # single-machine case
+                        # tag = f"{tag_prefix}_{sys}_cm{cache_mem}GB"
+                        yield {"system": sys, "model": model, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
 
 
 def get_user_input(tag_prefix):
     try_times = 0
     sys = "DP"
+    model = "SAGE"
     while True:
         user_args = input("Please input the args:").split(";")
         try:
@@ -38,17 +41,18 @@ def get_user_input(tag_prefix):
             assert cache_mem >= 0 and cache_mem < 6
 
             cm = cache_mem * 1024 * 1024 * 1024
-            tag = f"test_t{try_times}_{sys}_nl{nl}of8_cm{cache_mem}GB"
+            tag = f"test_t{try_times}_{sys}_{model}_nl{nl}of8_cm{cache_mem}GB"
             try_times += 1
-            yield {"system": sys, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
+            yield {"system": sys, "model": model, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
         except:
             sys = "DP"
+            model = "SAGE"
             nl = 4
             cache_mem = 1
             cm = cache_mem * 1024 * 1024 * 1024
 
             tag = f"test_t{try_times}_{sys}_nl{nl}of8_cm{cache_mem}GB"
-            yield {"system": sys, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
+            yield {"system": sys, "model": model, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
 
 
 if __name__ == "__main__":
@@ -64,6 +68,9 @@ if __name__ == "__main__":
         # for inputs in get_user_input(args.tag):
         for key, value in inputs.items():
             setattr(args, key, value)
+        if args.model == "GAT":
+            assert args.num_heads == 8
+            args.num_hidden = 8
         utils.show_args(args)
         shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(args, global_nfeat, shared_tensor_list)
         # reimport train.py
