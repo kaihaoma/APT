@@ -606,7 +606,7 @@ class MPFeatureShuffle(torch.autograd.Function):
     def backward(ctx, grad_output_tensor: torch.Tensor) -> torch.Tensor:
         fsi: MPFeatureShuffleInfo = ctx.fsi
         shuffle_grad = mp_feat_shuffle_bwd(
-            grad_output_tensor,
+            grad_output_tensor / fsi.recv_size,
             fsi.send_size,
             fsi.recv_size,
             fsi.feat_dim,
