@@ -10,7 +10,7 @@ namespace npc {
 const int WARP_SIZE = 32;
 const int BLOCK_SIZE = 8 * WARP_SIZE;
 const int BLOCK_NUM = 2;
-const int MAX_NUM_DEVICES = 17;
+const int MAX_NUM_DEVICES = 33;
 const int NUM_THREADS = 1024;
 
 void IndexSelectAll(

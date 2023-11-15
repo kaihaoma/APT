@@ -7,8 +7,8 @@ import importlib
 
 def get_pre_defined_args(tag_prefix):
     num_try_times = 1
-    cache_memory_in_gbs = [1]
-    # cache_memory_in_gbs = list(range(6))
+    # cache_memory_in_gbs = [1]
+    cache_memory_in_gbs = list(range(8))
     system = ["DP", "NP", "SP", "MP"]
     models = ["SAGE", "GCN", "GAT"]
     # num_localnode_feats_in_workers = list(range(4, 8))
@@ -17,9 +17,9 @@ def get_pre_defined_args(tag_prefix):
 
     for try_times in range(num_try_times):
         for nl in num_localnode_feats_in_workers:
-            for sys in system:
+            for cache_mem in cache_memory_in_gbs:
                 for model in models:
-                    for cache_mem in cache_memory_in_gbs:
+                    for sys in system:
                         cm = cache_mem * 1024 * 1024 * 1024
                         # cross-machine feat loading case
                         tag = f"t{try_times}_{sys}_{model}_nl{nl}of8_cm{cache_mem}GB"

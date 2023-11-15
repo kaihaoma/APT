@@ -339,7 +339,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     total_time[2] += ms_training_time
 
                     # record mini-batches stage time
-                    """
                     record_val = [
                         ms_samping_time,
                         # t0 - bt0,
@@ -349,7 +348,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                         # t2 - bt2,
                     ]
                     record_list.append(record_val)
-                    """
+
                 if step >= LIMIT_BATCHES:
                     break
 
@@ -389,15 +388,12 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
             avg_time_epoch_training = round(total_time[2] / num_record_epochs, 4)
 
             # write record to csv file
-            """
             record_path = f"./logs/record/{args.tag}.csv"
             with open(record_path, "a") as f:
                 writer = csv.writer(f, lineterminator="\n")
                 writer.writerows(record_list)
-            """
 
             # cross-machine feature loading variance check
-            """
             check_flag = True
             fail_idx = []
             for cid in range(3):
@@ -407,10 +403,9 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 if variance > 2:
                     check_flag = False
                     fail_idx.append(cid)
-            
+
             if not check_flag:
                 args.tag = f"variance{fail_idx}_{args.tag}"
-            """
 
             with open(args.logs_dir, "a") as f:
                 writer = csv.writer(f, lineterminator="\n")
@@ -423,7 +418,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
                 log_info = [
                     write_tag,
-                    # args.model,
+                    args.model,
                     args.batch_size,
                     args.input_dim,
                     args.fan_out,
