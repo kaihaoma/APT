@@ -163,48 +163,49 @@ def cache_adj_and_feats(
         )
     elif args.cache_mode == "dryrun":
         # temp cache no graph nodes
-        print(f"[Note]Caching mode:{args.cache_mode} No cache graph nodes")
+        print(f"[Note]Rk#{rank} Caching mode:{args.cache_mode} No cache graph nodes")
         num_cached_graph_nodes = 0
         cache_graph_node_idx = torch.tensor([], dtype=torch.long)
-        print(f"[Note]Caching mode:{args.cache_mode} Cache node_feats")
+        print(f"[Note]Rk#{rank} Caching mode:{args.cache_mode} Cache node_feats")
 
         # load dryrun result
-        def replace_whitespace(s):
-            return str(s).replace(" ", "")
-
-        def sys_to_key(system):
-            return "npc" if system == "NP" else "ori"
-
-        config_key = args.configs_path.split("/")[-2]
-
-        # if args.system in ["DP", "NP"]:
         if args.system in ["NP"]:
-            caching_candidate_path = (
-                f"{args.caching_candidate_path_prefix}/{sys_to_key(args.system)}_{config_key}_{replace_whitespace(args.fan_out)}/rk#{rank}_epo100.pt"
-            )
+            caching_candidate_path = f"{args.dryrun_file_path}/rk#{rank}_epo100.pt"
             node_feats_freqs = torch.load(caching_candidate_path)[1]
+            sorted_idx = torch.sort(node_feats_freqs, descending=True)[1]
+
         else:
-            ori_freq_lists = [
-                torch.load(
-                    f"{args.caching_candidate_path_prefix}/{sys_to_key(args.system)}_{config_key}_{replace_whitespace(args.fan_out)}/rk#{r}_epo100.pt"
-                )[1]
-                for r in range(args.world_size)
-            ]
-            sum_freq_lists = torch.stack(ori_freq_lists, dim=0).sum(dim=0)
-            if args.system == "MP" or args.system == "DP":
-                node_feats_freqs = sum_freq_lists
-            elif args.system == "SP":
+            if rank == 0:
+                ori_freq_lists = [torch.load(f"{args.dryrun_file_path}/rk#{r}_epo100.pt")[1] for r in range(args.world_size)]
+                sum_freq_lists = torch.stack(ori_freq_lists, dim=0).sum(dim=0).to(args.device)
+
+            if args.system in ["MP", "DP"]:
+                if rank == 0:
+                    sorted_idx = torch.sort(sum_freq_lists, descending=True)[1]
+                else:
+                    sorted_idx = torch.empty(num_total_nodes, dtype=torch.long, device=args.device)
+                dist.broadcast(sorted_idx, 0)
+                sorted_idx = sorted_idx.cpu()
+
+            elif args.system in ["SP"]:
+                if rank != 0:
+                    sum_freq_lists = torch.empty(num_total_nodes, dtype=torch.long, device=args.device)
+                dist.broadcast(sum_freq_lists, 0)
+
                 node_feats_freqs = torch.zeros(num_total_nodes, dtype=torch.long)
                 node_feats_freqs[args.min_vids[rank] : args.min_vids[rank + 1]] = sum_freq_lists[args.min_vids[rank] : args.min_vids[rank + 1]]
+                sorted_idx = torch.sort(sum_freq_lists, descending=True)[1].cpu()
+                del node_feats_freqs
+                del sum_freq_lists
 
-        sorted_node_feats_freq, sorted_idx = torch.sort(node_feats_freqs, descending=True)
-        del sorted_node_feats_freq
+        # cache based on sorted_idx
         local_sorted_idx = torch.masked_select(sorted_idx, localnode_feats_idx_mask[sorted_idx])
         base = args.world_size if args.system == "MP" else 1
         num_cached_feat_nodes = min(
             local_sorted_idx.numel(),
             int(args.cache_memory * base / (args.input_dim * BYTES_PER_ELEMENT)),
         )
+
         cache_feat_node_idx = local_sorted_idx[:num_cached_feat_nodes]
 
     else:
@@ -266,7 +267,7 @@ def load_partition(
     )
     num_cached_feat_nodes = cache_feat_node_idx.numel()
     num_cached_graph_nodes = cache_graph_node_idx.numel()
-    print(f"[Note]{args.cache_mode}: #feats:{num_cached_feat_nodes}\t #graphs:{num_cached_graph_nodes}\t Mem:{get_total_mem_usage_in_gb()}")
+    print(f"[Note]Rk#{rank} {args.cache_mode}: #feats:{num_cached_feat_nodes}\t #graphs:{num_cached_graph_nodes}\t Mem:{get_total_mem_usage_in_gb()}")
     dist.barrier()
     if args.max_cache_feat_nodes >= 0 and num_cached_feat_nodes > args.max_cache_feat_nodes:
         num_cached_feat_nodes = args.max_cache_feat_nodes
@@ -276,7 +277,7 @@ def load_partition(
         num_cached_graph_nodes = args.max_cache_graph_nodes
         cache_graph_node_idx = cache_graph_node_idx[:num_cached_graph_nodes]
 
-    print(f"[Note]Force Limit{args.cache_mode}: #feats:{num_cached_feat_nodes}\t #graphs:{num_cached_graph_nodes}\t")
+    print(f"[Note]Rk#{rank} Force Limit{args.cache_mode}: #feats:{num_cached_feat_nodes}\t #graphs:{num_cached_graph_nodes}\t")
     # cache graph
     if num_cached_graph_nodes > 0:
         cache_indptr = torch.hstack([indptr[pt + 1] - indptr[pt] for pt in cache_graph_node_idx])
@@ -290,7 +291,7 @@ def load_partition(
         cache_indices = torch.empty(0, dtype=torch.long)
 
     print(
-        f"[Note]#graph cached:{num_cached_graph_nodes}\t indptr:{cache_indptr.shape}\t indices:{cache_indices.shape}\t Mem:{get_total_mem_usage_in_gb()}"
+        f"[Note]Rk#{rank} #graph cached:{num_cached_graph_nodes}\t indptr:{cache_indptr.shape}\t indices:{cache_indices.shape}\t Mem:{get_total_mem_usage_in_gb()}"
     )
     num_cached_graph_elements = cache_indices.numel()
     dist.barrier()
@@ -312,7 +313,7 @@ def load_partition(
     cache_feat_node_pos = localnode_feat_pos[cache_feat_node_idx]
 
     if args.system == "MP":
-        print(f"[Note]cumsum_feat_dim:{args.cumsum_feat_dim}\t my:{args.cumsum_feat_dim[rank]} - {args.cumsum_feat_dim[rank+1]}")
+        print(f"[Note]Rk#{rank} cumsum_feat_dim:{args.cumsum_feat_dim}\t my:{args.cumsum_feat_dim[rank]} - {args.cumsum_feat_dim[rank+1]}")
         cached_feats = localnode_feats[
             cache_feat_node_pos,
             args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1],
@@ -373,8 +374,8 @@ def load_partition(
     )
 
 
-def register_min_vids(min_vids: torch.Tensor) -> None:
-    torch.ops.npc.register_min_vids(min_vids)
+def register_min_vids(shuffle_min_vids: torch.Tensor, shuffle_id_offset: int = 0) -> None:
+    torch.ops.npc.register_min_vids(shuffle_min_vids, shuffle_id_offset)
 
 
 def register_multi_machines_scheme(args: argparse.Namespace) -> Optional[torch.Tensor]:

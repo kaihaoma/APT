@@ -28,7 +28,6 @@ TORCH_LIBRARY(npc, m) {
       .def("crossmachine_load_subtensor", &CrossMachineLoadSubtensor)
       .def("cluster_reqs", &ClusterReqs)
       .def("local_sample_one_layer", &LocalSamplingNeibhorsOneLayer)
-      .def("srcdst_to_vir", &SrcDsttoVir)
       .def("src_to_vir", &SrcToVir)
       .def("np_sample_and_shuffle", &NPSampleAndShuffle)
       .def("sp_sample_and_shuffle", &SPSampleAndShuffle)

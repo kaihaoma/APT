@@ -89,10 +89,12 @@ void Initialize(
   state->cross_machine_flag = false;
 }
 
-void RegisterMinVids(torch::Tensor min_vids) {
+void RegisterMinVids(torch::Tensor shuffle_min_vids, IdType shuffle_id_offset) {
   auto* state = NPCState::Global();
-  state->min_vids = min_vids;
-  LOG(INFO) << "Register min_vids: " << TensorToString(min_vids);
+  state->shuffle_min_vids = shuffle_min_vids;
+  state->shuffle_id_offset = shuffle_id_offset;
+  LOG(INFO) << "Register shuffle_min_vids: " << TensorToString(shuffle_min_vids)
+            << "\t shuffle_id_offset: " << shuffle_id_offset;
 }
 
 void RegisterMultiMachinesScheme(

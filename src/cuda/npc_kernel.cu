@@ -9,80 +9,26 @@
 
 namespace npc {
 
-// map src and dst to vir_nodes
-//[is_src, device_id, dst_idx]
-// base1: world_size * num_dst base2: num_dst
-__global__ void _MapSrcAndDst(
-    int world_size, int fanout, IdType num_dst, IdType num_src, IdType num_vir,
-    IdType *min_vids, IdType *dst, IdType *src, IdType *vir_nodes) {
-  __shared__ IdType device_vid[MAX_NUM_DEVICES];
-  IdType idx = blockDim.x * blockIdx.x + threadIdx.x;
-  IdType stride = gridDim.x * blockDim.x;
-  IdType vid, device_id, offset;
-  if (threadIdx.x <= world_size) {
-    device_vid[threadIdx.x] = min_vids[threadIdx.x];
-  }
-  __syncthreads();
-  // offset = [is_src, dst_idx]
-  while (idx < num_vir) {
-    if (idx < num_dst) {
-      // map dst to vir_nodes
-      vid = dst[idx];
-      device_id = 0;
-      offset = idx;
-    } else {
-      // map src to vir_nodes
-      IdType src_idx = idx - num_dst;
-      vid = src[src_idx];
-      offset = (world_size * num_dst) + int(src_idx / fanout);
-    }
-
-    while (device_id + 1 < world_size && device_vid[device_id + 1] <= vid) {
-      ++device_id;
-    }
-
-    vir_nodes[idx] = device_id * num_dst + offset;
-    idx += stride;
-  }
-}
-
-torch::Tensor MapSrcDsttoVir(
-    IdType world_size, IdType fanout, torch::Tensor dst, torch::Tensor src,
-    torch::Tensor min_vids) {
-  auto stream = at::cuda::getCurrentCUDAStream();
-  auto num_dst = dst.numel();
-  auto num_src = src.numel();
-  auto num_vir = num_dst + num_src;
-  auto vir_nodes = torch::empty({num_vir}, dst.options());
-  dim3 block(NUM_THREADS);
-  dim3 grid((num_vir + NUM_THREADS - 1) / NUM_THREADS);
-  _MapSrcAndDst<<<grid, block, 0, stream>>>(
-      world_size, fanout, num_dst, num_src, num_vir,
-      min_vids.data_ptr<IdType>(), dst.data_ptr<IdType>(),
-      src.data_ptr<IdType>(), vir_nodes.data_ptr<IdType>());
-  CUDACHECK(cudaStreamSynchronize(stream));
-  return vir_nodes;
-}
-
 // map src to vir_nodes
 //[device_id, dst_idx]
 // vir_nodes = device_id * num_dst + dst_idx
 // dst_idx = int(idx / fanout)
 __global__ void _MapSrctoVir(
     int wolrd_size, int fanout, IdType num_dst, IdType num_src,
-    IdType *min_vids, IdType *src, IdType *vir_nodes) {
+    IdType shuffle_id_offset, IdType *shuffle_min_vids, IdType *src,
+    IdType *vir_nodes) {
   __shared__ IdType device_vid[MAX_NUM_DEVICES];
   IdType idx = blockDim.x * blockIdx.x + threadIdx.x;
   IdType stride = gridDim.x * blockDim.x;
   IdType vid, device_id;
   if (threadIdx.x <= wolrd_size) {
-    device_vid[threadIdx.x] = min_vids[threadIdx.x];
+    device_vid[threadIdx.x] = shuffle_min_vids[threadIdx.x];
   }
   __syncthreads();
 
   while (idx < num_src) {
     vid = src[idx];
-    device_id = 0;
+    device_id = shuffle_id_offset;
     while (device_id + 1 < wolrd_size && device_vid[device_id + 1] <= vid) {
       ++device_id;
     }
@@ -94,7 +40,7 @@ __global__ void _MapSrctoVir(
 
 torch::Tensor MapSrctoVir(
     IdType world_size, IdType fanout, IdType num_dst, torch::Tensor src,
-    torch::Tensor min_vids) {
+    IdType shuffle_id_offset, torch::Tensor shuffle_min_vids) {
   auto stream = at::cuda::getCurrentCUDAStream();
   auto num_src = src.numel();
   auto vir_nodes = torch::empty({num_src}, src.options());
@@ -102,45 +48,14 @@ torch::Tensor MapSrctoVir(
   dim3 grid((num_src + NUM_THREADS - 1) / NUM_THREADS);
 
   _MapSrctoVir<<<grid, block, 0, stream>>>(
-      world_size, fanout, num_dst, num_src, min_vids.data_ptr<IdType>(),
-      src.data_ptr<IdType>(), vir_nodes.data_ptr<IdType>());
+      world_size, fanout, num_dst, num_src, shuffle_id_offset,
+      shuffle_min_vids.data_ptr<IdType>(), src.data_ptr<IdType>(),
+      vir_nodes.data_ptr<IdType>());
   CUDACHECK(cudaStreamSynchronize(stream));
   return vir_nodes;
 }
 
 torch::Tensor GetVirSendOffset(
-    int world_size, int base, torch::Tensor sorted_nodes,
-    torch::Tensor unique_nodes) {
-  auto cuda_options = sorted_nodes.options();
-  thrust::device_vector<int> device_vids(world_size * 2 + 1);
-  // init device_vids to base * i for in in [0, world_size*2]
-  thrust::sequence(device_vids.begin(), device_vids.end(), 0, base);
-
-  auto send_offset = torch::empty({world_size * 3 + 1}, cuda_options);
-  auto num_sorted_nodes = sorted_nodes.numel();
-  auto num_unique_nodes = unique_nodes.numel();
-  thrust::device_ptr<IdType> sorted_nodes_start(
-      sorted_nodes.data_ptr<IdType>()),
-      sorted_nodes_end(sorted_nodes_start + num_sorted_nodes),
-      unique_nodes_start(unique_nodes.data_ptr<IdType>()),
-      unique_nodes_end(unique_nodes_start + num_unique_nodes),
-      send_offset_start(send_offset.data_ptr<IdType>());
-  // sorted_nodes[0:num_sorted_nodes]
-  // search_val [0:2*world_size+1]
-  thrust::lower_bound(
-      sorted_nodes_start, sorted_nodes_end, device_vids.begin(),
-      device_vids.end(), send_offset_start);
-  // unique_node[0:num_unique_nodes]
-  // search_val [world_size+1:2*world_size+1]
-  thrust::lower_bound(
-      unique_nodes_start, unique_nodes_end,
-      device_vids.begin() + world_size + 1, device_vids.end(),
-      send_offset_start + world_size * 2 + 1);
-
-  return send_offset;
-}
-
-torch::Tensor GetVirSendOffsetV2(
     int world_size, int base, torch::Tensor sorted_nodes,
     torch::Tensor unique_nodes) {
   auto cuda_options = sorted_nodes.options();
@@ -173,23 +88,6 @@ torch::Tensor GetVirSendOffsetV2(
   return send_offset;
 }
 
-// Virtual = (1 + belongs_to[src]) * num_total_nodes + dst
-__global__ void _ToVirtual(
-    int world_size, IdType num_total_nodes, IdType *min_vids, IdType fanout,
-    IdType *dst, IdType num_src, IdType *src) {
-  IdType idx = blockDim.x * blockIdx.x + threadIdx.x;
-  IdType stride = gridDim.x * blockDim.x;
-
-  while (idx < num_src) {
-    auto rank = 0;
-    auto vid = src[idx];
-    while (rank + 1 < world_size && min_vids[rank + 1] <= vid) {
-      ++rank;
-    }
-    src[idx] = (rank + 1) * num_total_nodes + dst[int(idx / fanout)];
-    idx += stride;
-  }
-}
 // Load node feature from dev&uva in on time
 // 1. classify feat type 0: on dev 1: on uva
 __global__ void _CSRRowWiseLoadSubtensorAlignedAllKernel(
@@ -293,8 +191,7 @@ __global__ void _CSRRowWiseSampleReplaceKernel(
   }
 }
 
-torch::Tensor LocalSampleNeighbors(
-    torch::Tensor frontier, int fanout, bool to_virtual) {
+torch::Tensor LocalSampleNeighbors(torch::Tensor frontier, int fanout) {
   auto *state = NPCState::Global();
   auto num_frontier = frontier.numel();
   auto stream = at::cuda::getCurrentCUDAStream();
@@ -320,30 +217,20 @@ torch::Tensor LocalSampleNeighbors(
           uva_indptr.data_ptr<IdType>(), uva_indices.data_ptr<IdType>(),
           adj_pos_map.data_ptr<IdType>(), out_indices.data_ptr<IdType>());
 
-  if (to_virtual) {
-    auto num_total_nodes = state->graph_storage.num_total_nodes;
-    auto num_out_indices = out_indices.numel();
-    dim3 block_vir(NUM_THREADS);
-    dim3 grid_vir((num_out_indices + NUM_THREADS - 1) / NUM_THREADS);
-
-    _ToVirtual<<<grid, block, 0, stream>>>(
-        state->world_size, num_total_nodes, state->min_vids.data_ptr<IdType>(),
-        fanout, frontier.data_ptr<IdType>(), num_out_indices,
-        out_indices.data_ptr<IdType>());
-  }
   CUDACHECK(cudaStreamSynchronize(stream));
   return out_indices;
 }
 
 __global__ void _CountDeviceVerticesKernel(
-    int world_size, IdType *min_vids, IdType num_seeds, IdType *seeds,
-    IdType *bucket_size, IdType *belongs_to, IdType *inner_bucket_offset) {
+    int world_size, IdType shuffle_id_offset, IdType *shuffle_min_vids,
+    IdType num_seeds, IdType *seeds, IdType *bucket_size, IdType *belongs_to,
+    IdType *inner_bucket_offset) {
   __shared__ IdType local_count[MAX_NUM_DEVICES];
   __shared__ IdType device_vid[MAX_NUM_DEVICES];
   IdType idx = blockDim.x * blockIdx.x + threadIdx.x;
   IdType stride = gridDim.x * blockDim.x;
   if (threadIdx.x <= world_size) {
-    device_vid[threadIdx.x] = min_vids[threadIdx.x];
+    device_vid[threadIdx.x] = shuffle_min_vids[threadIdx.x];
     local_count[threadIdx.x] = 0;
   }
 
@@ -351,7 +238,7 @@ __global__ void _CountDeviceVerticesKernel(
 
   IdType device_id, vid;
   while (idx < num_seeds) {
-    device_id = 0;
+    device_id = shuffle_id_offset;
     vid = seeds[idx];
     while (device_id + 1 < world_size && device_vid[device_id + 1] <= vid) {
       ++device_id;
@@ -448,7 +335,9 @@ __global__ void _CountMultiMachinesDeviceKernel(
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-ClusterAndPermute(int world_size, torch::Tensor seeds, torch::Tensor min_vids) {
+ClusterAndPermute(
+    int world_size, torch::Tensor seeds, IdType shuffle_id_offset,
+    torch::Tensor shuffle_min_vids) {
   auto num_seeds = seeds.numel();
   auto stream = at::cuda::getCurrentCUDAStream();
   auto dev_tensor_options = seeds.options();
@@ -465,8 +354,8 @@ ClusterAndPermute(int world_size, torch::Tensor seeds, torch::Tensor min_vids) {
   dim3 grid(num_blocks);
 
   _CountDeviceVerticesKernel<<<grid, block, 0, stream>>>(
-      world_size, min_vids.data_ptr<IdType>(), num_seeds,
-      seeds.data_ptr<IdType>(), bucket_size.data_ptr<IdType>(),
+      world_size, shuffle_id_offset, shuffle_min_vids.data_ptr<IdType>(),
+      num_seeds, seeds.data_ptr<IdType>(), bucket_size.data_ptr<IdType>(),
       belongs_to.data_ptr<IdType>(), inner_bucket_offset.data_ptr<IdType>());
   CUDACHECK(cudaStreamSynchronize(stream));
 
@@ -487,7 +376,7 @@ MultiMachinesClusterAndPermute(torch::Tensor seeds) {
   auto *state = NPCState::Global();
   auto world_size = state->world_size;
   auto num_remote_workers = state->num_remote_workers;
-  auto min_vids = state->min_vids;
+  auto shuffle_min_vids = state->shuffle_min_vids;
   auto stream = at::cuda::getCurrentCUDAStream();
   auto num_seeds = seeds.numel();
   auto cuda_options = seeds.options();
@@ -506,7 +395,7 @@ MultiMachinesClusterAndPermute(torch::Tensor seeds) {
   // cluster into local nodes and remote nodes(by min_vids)
   _CountMultiMachinesDeviceKernel<<<grid, block, 0, stream>>>(
       world_size, num_remote_workers, feat_pos_map.data_ptr<IdType>(),
-      remote_worker_map.data_ptr<IdType>(), min_vids.data_ptr<IdType>(),
+      remote_worker_map.data_ptr<IdType>(), shuffle_min_vids.data_ptr<IdType>(),
       num_seeds, seeds.data_ptr<IdType>(), bucket_size.data_ptr<IdType>(),
       belongs_to.data_ptr<IdType>(), inner_bucket_offset.data_ptr<IdType>());
   CUDACHECK(cudaStreamSynchronize(stream));

@@ -185,9 +185,7 @@ def determine_feature_reside_cpu(args, global_node_feats: torch.Tensor, shared_t
                 key = "npc" if args.system == "NP" else "ori"
                 fanout_info = str(args.fan_out).replace(" ", "")
                 config_key = args.configs_path.split("/")[-2]
-                local_freq_lists = [
-                    torch.load(f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}/rk#{r}_epo100.pt")[1] for r in range(st, en)
-                ]
+                local_freq_lists = [torch.load(f"{args.dryrun_file_path}/rk#{r}_epo100.pt")[1] for r in range(st, en)]
                 sum_freqs = torch.stack(local_freq_lists, dim=0).sum(dim=0)
                 sort_freqs_idx = torch.sort(sum_freqs, descending=True)[1]
                 add_sort_freqs_idx = sort_freqs_idx[torch.logical_or(sort_freqs_idx < args.min_vids[st], sort_freqs_idx >= args.min_vids[en])]
@@ -342,18 +340,29 @@ def init_args(args=None) -> argparse.Namespace:
     else:
         raise f"[Note] configs:{args.configs_path} not exists!"
 
-    args.min_vids = list(map(int, args.min_vids.split(",")))
-    args.fan_out = list(map(int, args.fan_out.split(",")))
+    if not isinstance(args.min_vids, list):
+        args.min_vids = list(map(int, args.min_vids.split(",")))
+    if not isinstance(args.fan_out, list):
+        args.fan_out = list(map(int, args.fan_out.split(",")))
 
     # cache_memory to bytes
     if args.cache_memory > 0:
         args.cache_memory = args.cache_memory * 1024 * 1024 * 1024
 
+    # define dryrun file path
+    key = "npc" if args.system == "NP" else "ori"
+    fanout_info = str(args.fan_out).replace(" ", "")
+    config_key = args.configs_path.split("/")[-2]
+    print(f"[Note]key:{key}\t sys:{args.system}\t fanout:{fanout_info}\t config_key:{config_key}")
+    args.dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"
+
+    """
     fanout_info = str(args.fan_out).replace(" ", "")
     if args.cache_mode in ["greedy", "costmodel"] and args.sorted_idx_path == "" and args.cache_memory > 0:
         args.sorted_idx_path = f"{args.sampling_path}_{fanout_info}/uva16"
         # print(f"[Note]args.sorted_idx_path:{args.sorted_idx_path}")
         assert args.cache_memory <= 0 or args.sorted_idx_path != ""
+    """
 
     # For convenience, we use the same args for all systems
     # input dim for each process

@@ -11,10 +11,8 @@
 
 namespace npc {
 
-const int SP_BITWISE_SHIFT = 20;
-
 std::vector<torch::Tensor> LocalSamplingNeibhorsOneLayer(
-    torch::Tensor seeds, IdType fanout, IdType to_virtual = 0);
+    torch::Tensor seeds, IdType fanout);
 // return value:
 // 1. seeds (original order)
 // 2. neighbors (original order)
@@ -27,8 +25,6 @@ std::vector<torch::Tensor> NPSampleAndShuffle(
 // shuffle seeds based on min_vids
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 ShuffleSeeds(torch::Tensor seeds);
-
-torch::Tensor SrcDsttoVir(IdType fanout, torch::Tensor dst, torch::Tensor src);
 
 torch::Tensor SrcToVir(IdType fanout, IdType num_dst, torch::Tensor src);
 

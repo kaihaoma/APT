@@ -23,7 +23,7 @@ TEST(ShuffleSeeds, ShuffleSeeds1) {
 
   auto seeds = world_size * torch::arange((base - 1)) + rank;
   seeds = seeds.to(gpu_options);
-  npc::RegisterMinVids(min_vids);
+  npc::RegisterMinVids(min_vids, 0);
   std::tie(recv_frontier, permutation, recv_offset, dev_offset) =
       npc::ShuffleSeeds(seeds);
   LOG(INFO) << "Rk#" << rank

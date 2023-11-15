@@ -4,8 +4,8 @@ from typing import Tuple, List
 from dgl.heterograph import DGLBlock
 
 
-def local_sample_one_layer(seeds: torch.Tensor, fanout: int, to_virtual: int = 0):
-    return torch.ops.npc.local_sample_one_layer(seeds, fanout, to_virtual)
+def local_sample_one_layer(seeds: torch.Tensor, fanout: int):
+    return torch.ops.npc.local_sample_one_layer(seeds, fanout)
 
 
 def np_sample_and_shuffle(seeds: torch.Tensor, fanout: int):

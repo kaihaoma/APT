@@ -15,7 +15,7 @@ void Initialize(
     IdType rank, IdType local_rank, IdType world_size,
     torch::Tensor nccl_id_tensor_list);
 
-void RegisterMinVids(torch::Tensor min_vids);
+void RegisterMinVids(torch::Tensor shuffle_min_vids, IdType shuffle_id_offset);
 
 void RegisterMultiMachinesScheme(
     torch::Tensor remote_worker_map, torch::Tensor remote_worker_id);
