@@ -1,0 +1,21 @@
+{
+    "name": "igbfull",
+    "num_workers": 8,
+    "world_size": 8,
+    "input_dim": 128,
+    "num_classes": 19,
+    "min_vids": [
+        0,
+        31553963,
+        62211325,
+        97148937,
+        132103977,
+        167050244,
+        201831141,
+        234395952,
+        269346174
+    ],
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/igbfull_w8_metis/igbfull_w8_metis.bin",
+    "number_nodes": 269346174,
+    "number_edges": 3996442004
+}
