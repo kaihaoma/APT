@@ -421,6 +421,8 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     args.model,
                     args.batch_size,
                     args.input_dim,
+                    args.num_hidden,
+                    args.num_heads,
                     args.fan_out,
                     args.cache_mode,
                     cache_memory,
