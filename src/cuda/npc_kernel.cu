@@ -9,6 +9,60 @@
 
 namespace npc {
 
+// map src and dst to vir_nodes
+//[is_src, device_id, dst_idx]
+// base1: world_size * num_dst base2: num_dst
+__global__ void _MapSrcAndDst(
+    int world_size, int fanout, IdType num_dst, IdType num_src, IdType num_vir,
+    IdType shuffle_id_offset, IdType *shuffle_min_vids, IdType *dst,
+    IdType *src, IdType *vir_nodes) {
+  __shared__ IdType device_vid[MAX_NUM_DEVICES];
+  IdType idx = blockDim.x * blockIdx.x + threadIdx.x;
+  IdType stride = gridDim.x * blockDim.x;
+  IdType vid, device_id = shuffle_id_offset, offset;
+  if (threadIdx.x <= world_size) {
+    device_vid[threadIdx.x] = shuffle_min_vids[threadIdx.x];
+  }
+  __syncthreads();
+  // offset = [is_src, dst_idx]
+  while (idx < num_vir) {
+    if (idx < num_dst) {
+      // map dst to vir_nodes
+      vid = dst[idx];
+      offset = idx;
+    } else {
+      // map src to vir_nodes
+      IdType src_idx = idx - num_dst;
+      vid = src[src_idx];
+      offset = (world_size * num_dst) + int(src_idx / fanout);
+    }
+
+    while (device_id + 1 < world_size && device_vid[device_id + 1] <= vid) {
+      ++device_id;
+    }
+
+    vir_nodes[idx] = device_id * num_dst + offset;
+    idx += stride;
+  }
+}
+
+torch::Tensor MapSrcDsttoVir(
+    IdType world_size, IdType fanout, torch::Tensor dst, torch::Tensor src,
+    IdType shuffle_id_offset, torch::Tensor shuffle_min_vids) {
+  auto stream = at::cuda::getCurrentCUDAStream();
+  auto num_dst = dst.numel();
+  auto num_src = src.numel();
+  auto num_vir = num_dst + num_src;
+  auto vir_nodes = torch::empty({num_vir}, dst.options());
+  dim3 block(NUM_THREADS);
+  dim3 grid((num_vir + NUM_THREADS - 1) / NUM_THREADS);
+  _MapSrcAndDst<<<grid, block, 0, stream>>>(
+      world_size, fanout, num_dst, num_src, num_vir, shuffle_id_offset,
+      shuffle_min_vids.data_ptr<IdType>(), dst.data_ptr<IdType>(),
+      src.data_ptr<IdType>(), vir_nodes.data_ptr<IdType>());
+  CUDACHECK(cudaStreamSynchronize(stream));
+  return vir_nodes;
+}
 // map src to vir_nodes
 //[device_id, dst_idx]
 // vir_nodes = device_id * num_dst + dst_idx
@@ -84,6 +138,38 @@ torch::Tensor GetVirSendOffset(
   thrust::lower_bound(
       unique_nodes_start, unique_nodes_end, device_vids.begin() + 1,
       device_vids.end(), send_offset_start + world_size + 1);
+
+  return send_offset;
+}
+
+torch::Tensor GetVirSendOffsetWithDst(
+    int world_size, int base, torch::Tensor sorted_nodes,
+    torch::Tensor unique_nodes) {
+  auto cuda_options = sorted_nodes.options();
+  thrust::device_vector<int> device_vids(world_size * 2 + 1);
+  // init device_vids to base * i for in in [0, world_size*2]
+  thrust::sequence(device_vids.begin(), device_vids.end(), 0, base);
+
+  auto send_offset = torch::empty({world_size * 3 + 1}, cuda_options);
+  auto num_sorted_nodes = sorted_nodes.numel();
+  auto num_unique_nodes = unique_nodes.numel();
+  thrust::device_ptr<IdType> sorted_nodes_start(
+      sorted_nodes.data_ptr<IdType>()),
+      sorted_nodes_end(sorted_nodes_start + num_sorted_nodes),
+      unique_nodes_start(unique_nodes.data_ptr<IdType>()),
+      unique_nodes_end(unique_nodes_start + num_unique_nodes),
+      send_offset_start(send_offset.data_ptr<IdType>());
+  // sorted_nodes[0:num_sorted_nodes]
+  // search_val [0:2*world_size+1]
+  thrust::lower_bound(
+      sorted_nodes_start, sorted_nodes_end, device_vids.begin(),
+      device_vids.end(), send_offset_start);
+  // unique_node[0:num_unique_nodes]
+  // search_val [world_size+1:2*world_size+1]
+  thrust::lower_bound(
+      unique_nodes_start, unique_nodes_end,
+      device_vids.begin() + world_size + 1, device_vids.end(),
+      send_offset_start + world_size * 2 + 1);
 
   return send_offset;
 }

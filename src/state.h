@@ -37,7 +37,7 @@ struct NPCState {
   int sampler_id, trainer_id, num_threads;
   cudaStream_t nccl_stream, cuda_copy_stream;
   std::vector<cudaStream_t> vec_cuda_stream;
-  //shuffle info
+  // shuffle info
   torch::Tensor shuffle_min_vids;
   IdType shuffle_id_offset;
 
@@ -46,7 +46,7 @@ struct NPCState {
   // graph topology
   FeatStorage feat_storage;
   // SP alltoall permute
-  torch::Tensor sp_alltoall_size_permute;
+  torch::Tensor sp_alltoall_size_permute_step2, sp_alltoall_size_permute_step3;
 
   // cross_machine_flag
   bool cross_machine_flag;

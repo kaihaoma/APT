@@ -76,16 +76,25 @@ void Initialize(
   }
   CUDACHECK(cudaSetDevice(local_rank));
 
-  //  init sp_alltoall_size_permute
-  std::vector<int> vec_sp_alltoall_size_permute(world_size * 2);
+  //  init two possile sp_alltoall_size_permute step 2 & 3
+  std::vector<int> vec_sp_alltoall_size_permute_step2(world_size * 2),
+      vec_sp_alltoall_size_permute_step3(world_size * 3);
   for (int r = 0; r < world_size; ++r) {
     for (int i = 0; i < 2; ++i) {
-      vec_sp_alltoall_size_permute[r * 2 + i] = i * world_size + r;
+      vec_sp_alltoall_size_permute_step2[r * 2 + i] = i * world_size + r;
+    }
+    for (int i = 0; i < 3; ++i) {
+      vec_sp_alltoall_size_permute_step3[r * 3 + i] = i * world_size + r;
     }
   }
-  state->sp_alltoall_size_permute = torch::tensor(vec_sp_alltoall_size_permute);
-  LOG(INFO) << "sp_alltoall_size_permute: "
-            << TensorToString(state->sp_alltoall_size_permute);
+  state->sp_alltoall_size_permute_step2 =
+      torch::tensor(vec_sp_alltoall_size_permute_step2);
+  state->sp_alltoall_size_permute_step3 =
+      torch::tensor(vec_sp_alltoall_size_permute_step3);
+  LOG(INFO) << "sp_alltoall_size_permute_step2: "
+            << TensorToString(state->sp_alltoall_size_permute_step2);
+  LOG(INFO) << "sp_alltoall_size_permute_step3: "
+            << TensorToString(state->sp_alltoall_size_permute_step3);
   state->cross_machine_flag = false;
 }
 

@@ -81,9 +81,9 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         num_total_val = val_idx.numel()
         num_val_per_rank = int(num_total_val // args.world_size)
         rank_val_idx = val_idx[rank * num_val_per_rank : (rank + 1) * num_val_per_rank]
-
+        acc_file_path = f"./logs/accuracy/Test_Nov17_{args.model}_{args.system}_{args.dataset}_{world_size}.txt"
         if rank == 0:
-            acc_file = open(f"./logs/accuracy/{args.model}_{args.system}_{args.dataset}_{world_size}.txt", "w")
+            acc_file = open(acc_file_path, "w")
 
     if args.system == "NP":
         sampler = npc.MixedNeighborSampler(
@@ -382,6 +382,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
         if args.debug and rank == 0:
             acc_file.close()
+            print(f"[Note]Acc file save to {acc_file_path}")
         if not args.debug and rank == 0 and args.num_epochs > 1:
             avg_time_epoch_sampling = round(total_time[0] / num_record_epochs, 4)
             avg_time_epoch_loading = round(total_time[1] / num_record_epochs, 4)

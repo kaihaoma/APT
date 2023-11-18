@@ -28,11 +28,14 @@ ShuffleSeeds(torch::Tensor seeds);
 
 torch::Tensor SrcToVir(IdType fanout, IdType num_dst, torch::Tensor src);
 
+torch::Tensor SrcDsttoVir(IdType fanout, torch::Tensor dst, torch::Tensor src);
+
 // SP sample shuffle
 //  input: seeds, frontier, seeds
 std::vector<torch::Tensor> SPSampleAndShuffle(
     IdType num_seeds, torch::Tensor send_frontier,
-    torch::Tensor sorted_allnodes, torch::Tensor unique_frontier);
+    torch::Tensor sorted_allnodes, torch::Tensor unique_frontier,
+    IdType shuffle_with_dst);
 
 // SP sample shuffle src nodes
 // input: uniqued src nodes

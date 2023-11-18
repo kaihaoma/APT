@@ -16,15 +16,7 @@ torch::Tensor FeatShuffle(
 
 torch::Tensor SPFeatShuffle(
     torch::Tensor inputs, torch::Tensor send_sizes, torch::Tensor recv_sizes,
-    IdType total_recv_size, IdType expand);
-
-torch::Tensor SPFeatShuffleAllGather(
-    torch::Tensor inputs, torch::Tensor send_sizes, torch::Tensor recv_sizes,
-    IdType total_recv_size, IdType expand);
-
-torch::Tensor SPFeatShuffleAllReduce(
-    torch::Tensor inputs, torch::Tensor send_sizes, torch::Tensor recv_sizes,
-    IdType total_recv_size, IdType expand);
+    IdType total_recv_size, IdType expand, IdType shuffle_with_dst);
 
 // MP feature shuffle forward
 torch::Tensor MPFeatShuffleFwd(

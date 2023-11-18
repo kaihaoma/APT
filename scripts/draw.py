@@ -5,40 +5,63 @@ import os
 import draw_utils
 
 
-def draw_motivation_fig(path="./logs/ap/single-machine-stable-Nov6.csv"):
-    headers, elements = draw_utils.read_csv(path, has_header=None)
-    dataset_list = ["papers", "friendster", "igblarge"]
-    ds_id = 0
-    labels = ["DP", "NP", "SP", "MP"]
-    num_sys = 4
-    num_gpu_cache_mem = 9
+def draw_motivation_fig(path_list=["./logs/ap/Nov15_single_machine_stable.csv"]):
+    
+    data_dicts = {}
+    for path in path_list:
+        headers, elements = draw_utils.read_csv(path, has_header=None)
 
-    plot_x_list = [list(range(num_gpu_cache_mem)) for _ in range(num_sys)]
-    plot_y_list = []
 
-    for lid, element in enumerate(elements):
-        tag_list = element[0].split("_")
-        sys = tag_list[1]
-        gpu_cache_mem = int(tag_list[4][2:-2])
-        print(f"[Note] dataset:{dataset_list[ds_id]}\t sys:{sys}\t gpu_cache_mem:{gpu_cache_mem}GB")
-        epoch_time = float(element[-1]) / 1000.0
-        plot_y_list.append(epoch_time)
+        
 
-        if (lid + 1) % (num_sys * num_gpu_cache_mem) == 0:
+        for lid, element in enumerate(elements):
+            # decode tag
+            tag_list = element[0].split("_")
+            graph = tag_list[0]
+            sys = tag_list[2]
+            model = tag_list[3]
+            gpu_cache_mem = int(tag_list[5][2:-2])
+
+            epoch_time = float(element[-1]) / 1000.0
+            # (gpu_cache_mem, epoch_time)
+            key = (graph, model, sys)
+            if key not in data_dicts:
+                data_dicts[key] = [[], []]
+            print(f"[Note] Insert key:{key} values:{gpu_cache_mem}, {epoch_time}")
+            while len(data_dicts[key][0]) <= gpu_cache_mem:
+                data_dicts[key][0].append(len(data_dicts[key][0]))
+                data_dicts[key][1].append(-1)
+                
+            data_dicts[key][0][gpu_cache_mem] = gpu_cache_mem
+            data_dicts[key][1][gpu_cache_mem] = epoch_time
+
+    key_lists = list(data_dicts.keys())
+    for key in key_lists:
+        print(f"[Note]data dict key: {key}")
+    dataset_list = ["papers", "friendster"]
+    labels_list = ["DP", "NP", "SP", "MP"]
+    models_list = ["SAGE", "GCN", "GAT"]
+    # one dataset, model a graph
+    for ds in dataset_list:
+        for models in models_list:
+            plot_x_list = []
+            plot_y_list = []
+            for label in labels_list:
+                key = (ds, models, label)
+                print(f"[Note]key:{key}\t data_dicts[key]:{data_dicts[key]}")
+                plot_x_list.append(data_dicts[key][0])
+                plot_y_list.append(data_dicts[key][1])
+
             draw_utils.plot_line(
-                plot_x_list=np.array(plot_x_list).reshape(num_sys, num_gpu_cache_mem),
-                plot_y_list=np.array(plot_y_list).reshape(num_sys, num_gpu_cache_mem),
-                labels=labels,
-                xticks=list(range(num_gpu_cache_mem)),
-                xlabels="GPU Cache Mem.",
+                plot_x_list=plot_x_list,
+                plot_y_list=plot_y_list,
+                labels=labels_list,
+                xticks=list(range(9)),
+                xlabels="GPU Cache Memory (GB)",
                 ylabels="Epoch Time (s)",
                 legends_font_size=18,
-                save_path=f"./scripts/figures/motivation/Nov6_motivation_fig_{dataset_list[ds_id]}.png",
-                yticks=[0, 4, 8, 12],
-                # fig_size=(8, 4.8),
+                save_path=f"./scripts/figures/motivation/Nov15_motivation_{ds}_{models}.png",
             )
-            ds_id += 1
-            plot_y_list = []
 
 
 def draw_accuracy(path_prefix="./outputs/accuracy"):
@@ -210,5 +233,5 @@ if __name__ == "__main__":
     # draw_ap_result(path="./logs/ap/multi_machines.csv")
     # draw_multi_machines_varied_cpu_memory()
 
-    # draw_motivation_fig()
-    draw_accuracy()
+    draw_motivation_fig(path_list=["./logs/ap/Nov15_single_machine_stable.csv", "./logs/ap/Nov17-single-machine-SP.csv"])
+    # draw_accuracy()

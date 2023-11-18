@@ -31,30 +31,21 @@ torch::Tensor FeatShuffle(
 
 torch::Tensor SPFeatShuffle(
     torch::Tensor inputs, torch::Tensor send_sizes, torch::Tensor recv_sizes,
-    IdType total_recv_size, IdType expand) {
+    IdType total_recv_size, IdType expand, IdType shuffle_with_dst) {
   auto* state = NPCState::Global();
   auto world_size = state->world_size;
   auto flatten_inputs = inputs.flatten();
   auto flatten_outputs =
       torch::empty(total_recv_size * expand, inputs.options());
-  SPFeatureAlltoAll(
-      flatten_inputs, flatten_outputs, send_sizes, recv_sizes, expand,
-      state->trainer_id);
-  auto outputs = flatten_outputs.reshape({-1, expand});
-  return outputs;
-}
-
-torch::Tensor SPFeatShuffleAllGather(
-    torch::Tensor inputs, torch::Tensor send_sizes, torch::Tensor recv_sizes,
-    IdType total_recv_size, IdType expand) {
-  auto* state = NPCState::Global();
-  auto world_size = state->world_size;
-  auto flatten_inputs = inputs.flatten();
-  auto flatten_outputs =
-      torch::empty(total_recv_size * expand, inputs.options());
-  SPFeatureAlltoAll(
-      flatten_inputs, flatten_outputs, send_sizes, recv_sizes, expand,
-      state->trainer_id);
+  if (shuffle_with_dst) {
+    SPFeatureAlltoAllWithDst(
+        flatten_inputs, flatten_outputs, send_sizes, recv_sizes, expand,
+        state->trainer_id);
+  } else {
+    SPFeatureAlltoAll(
+        flatten_inputs, flatten_outputs, send_sizes, recv_sizes, expand,
+        state->trainer_id);
+  }
   auto outputs = flatten_outputs.reshape({-1, expand});
   return outputs;
 }

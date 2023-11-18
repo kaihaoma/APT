@@ -16,7 +16,9 @@ sys.path.append("./examples")
 
 
 def get_inputdim(ds_name):
-    if ds_name == "papers":
+    if ds_name == "products":
+        return 100
+    elif ds_name == "papers":
         return 128
     elif ds_name == "friendster":
         return 256
@@ -27,7 +29,9 @@ def get_inputdim(ds_name):
 
 
 def get_num_classes(ds_name):
-    if ds_name == "papers":
+    if ds_name == "products":
+        return 47
+    elif ds_name == "papers":
         return 172
     elif ds_name == "friendster":
         return 3
@@ -52,23 +56,22 @@ def load_rawdata(path_prefix="/efs/khma/Projects/NPC/original_dataset"):
     # papers
     import load_data
 
-    """
-    graph, _ = load_data.load_ogb_dataset("ogbn-papers100M")
+    graph, _ = load_data.load_ogb_dataset("ogbn-products")
     print(f"[Note]Graph:{graph}")
 
-    save_graph_path = os.path.join(path_prefix, "papers.bin")
+    save_graph_path = os.path.join(path_prefix, "products.bin")
     print(f"[Note]Save graph to {save_graph_path}")
     dgl.save_graphs(save_graph_path, [graph])
-    """
+
     # friendster
 
     # igb-full
-    graph, _ = load_data.load_igb()
-    print(f"[Note]Graph:{graph}")
+    # graph, _ = load_data.load_igb()
+    # print(f"[Note]Graph:{graph}")
 
-    save_graph_path = os.path.join(path_prefix, "igbfull.bin")
-    print(f"[Note]Save graph to {save_graph_path}")
-    dgl.save_graphs(save_graph_path, [graph])
+    # save_graph_path = os.path.join(path_prefix, "igbfull.bin")
+    # print(f"[Note]Save graph to {save_graph_path}")
+    # dgl.save_graphs(save_graph_path, [graph])
 
 
 # load_original_graph ()
@@ -80,7 +83,7 @@ def load_original_graph(path_prefix="/efs/khma/Projects/NPC/original_dataset", d
     return graph
 
 
-def partition_graph(output_path="/efs/khma/Projects/NPC/npc_dataset", ds_name="papers", world_size_list=[8], part_method="metis"):
+def partition_graph(output_path="/efs/khma/Projects/NPC/npc_dataset", ds_name="papers", world_size_list=[8], part_method="metis", dry_run=True):
     graph = load_original_graph(ds_name=ds_name)
     n_nodes = graph.number_of_nodes()
     n_edges = graph.number_of_edges()
@@ -158,38 +161,40 @@ def partition_graph(output_path="/efs/khma/Projects/NPC/npc_dataset", ds_name="p
             json.dump(json_dict, f, indent=4)
 
         # dryrun
-        from dryrun import sample_profile, npc_sample_profile
+        if dry_run:
+            from dryrun import sample_profile, npc_sample_profile
 
-        dryrun_savedir = "/efs/khma/Projects/NPC/sampling_all/ap_simulation"
-        full_graph_name = f"{ds_name}_w{world_size}_{part_method}"
+            dryrun_savedir = "/efs/khma/Projects/NPC/sampling_all/ap_simulation"
+            full_graph_name = f"{ds_name}_w{world_size}_{part_method}"
 
-        sample_profile(
-            graph_name=f"ori_{full_graph_name}",
-            graph_path=graph_path,
-            world_size=world_size,
-            fanout=[10, 10, 10],
-            batch_size=1024,
-            save_dir=dryrun_savedir,
-            run_epochs=10,
-            save_to_path=True,
-        )
+            sample_profile(
+                graph_name=f"ori_{full_graph_name}",
+                graph_path=graph_path,
+                world_size=world_size,
+                fanout=[10, 10, 10],
+                batch_size=1024,
+                save_dir=dryrun_savedir,
+                run_epochs=10,
+                save_to_path=True,
+            )
 
-        npc_sample_profile(
-            graph_name=f"npc_{full_graph_name}",
-            graph_path=graph_path,
-            world_size=world_size,
-            fanout=[10, 10, 10],
-            min_vids=min_vids,
-            batch_size=1024,
-            save_dir=dryrun_savedir,
-            run_epochs=10,
-            save_to_path=True,
-        )
+            npc_sample_profile(
+                graph_name=f"npc_{full_graph_name}",
+                graph_path=graph_path,
+                world_size=world_size,
+                fanout=[10, 10, 10],
+                min_vids=min_vids,
+                batch_size=1024,
+                save_dir=dryrun_savedir,
+                run_epochs=10,
+                save_to_path=True,
+            )
 
 
 if __name__ == "__main__":
     # partitioned graph
     # load_rawdata()
+    partition_graph(ds_name="products", world_size_list=[32], part_method="metis", dry_run=False)
     # partition_graph(ds_name="papers", world_size_list=[32], part_method="metis")
     # partition_graph(ds_name="friendster", world_size_list=[32], part_method="metis")
-    partition_graph(ds_name="igbfull", world_size_list=[32], part_method="metis")
+    # partition_graph(ds_name="igbfull", world_size_list=[32], part_method="metis")

@@ -68,19 +68,64 @@ void _SPAlltoAll(
 void SPSampleAlltoAll(
     torch::Tensor input, torch::Tensor output, torch::Tensor send_sizes,
     torch::Tensor recv_sizes, IdType expand, IdType comm_type) {
-  if (input.dtype() == torch::kLong) {
-    _SPAlltoAll<IdType, ncclInt64>(
-        input.data_ptr<IdType>(), output.data_ptr<IdType>(),
-        send_sizes.data_ptr<IdType>(), recv_sizes.data_ptr<IdType>(), expand,
-        comm_type);
-  } else if (input.dtype() == torch::kFloat32) {
-    _SPAlltoAll<DataType, ncclFloat32>(
-        input.data_ptr<DataType>(), output.data_ptr<DataType>(),
-        send_sizes.data_ptr<IdType>(), recv_sizes.data_ptr<IdType>(), expand,
-        comm_type);
-  } else {
-    LOG(FATAL) << "Not Implemented Error";
+  _SPAlltoAll<IdType, ncclInt64>(
+      input.data_ptr<IdType>(), output.data_ptr<IdType>(),
+      send_sizes.data_ptr<IdType>(), recv_sizes.data_ptr<IdType>(), expand,
+      comm_type);
+}
+
+template <typename T, ncclDataType_t NCCL_DATA_TYPE>
+IdType _SPAlltoAllWithDst(
+    T* input, T* output, IdType* send_sizes, IdType* recv_sizes, IdType expand,
+    IdType comm_type) {
+  auto* state = NPCState::Global();
+  int world_size = state->world_size;
+  auto stream = at::cuda::getCurrentCUDAStream();
+  auto nccl_comm = state->nccl_comm_list[comm_type];
+  IdType send_dst_off = 0;
+  IdType recv_dst_off = 0;
+  ncclGroupStart();
+  for (int r = 0; r < world_size; ++r) {
+    // send_dst
+    IdType send_dst_size = send_sizes[3 * r];
+    IdType recv_dst_size = recv_sizes[3 * r];
+    NCCLCHECK(ncclSend(
+        input + send_dst_off * expand, send_dst_size * expand, NCCL_DATA_TYPE,
+        r, nccl_comm, stream));
+    NCCLCHECK(ncclRecv(
+        output + recv_dst_off * expand, recv_dst_size * expand, NCCL_DATA_TYPE,
+        r, nccl_comm, stream));
+    send_dst_off += send_dst_size;
+    recv_dst_off += recv_dst_size;
   }
+  IdType send_src_off = send_dst_off;
+  IdType recv_src_off = recv_dst_off;
+  for (int r = 0; r < world_size; ++r) {
+    // send_src
+    IdType send_src_size = send_sizes[3 * r + 1];
+    IdType recv_src_size = recv_sizes[3 * r + 1];
+    NCCLCHECK(ncclSend(
+        input + send_src_off * expand, send_src_size * expand, NCCL_DATA_TYPE,
+        r, nccl_comm, stream));
+    NCCLCHECK(ncclRecv(
+        output + recv_src_off * expand, recv_src_size * expand, NCCL_DATA_TYPE,
+        r, nccl_comm, stream));
+
+    send_src_off += send_src_size;
+    recv_src_off += recv_src_size;
+  }
+  ncclGroupEnd();
+  return recv_dst_off;
+}
+
+// Split Para. custom all-to-all
+IdType SPSampleAlltoAllWithDst(
+    torch::Tensor input, torch::Tensor output, torch::Tensor send_sizes,
+    torch::Tensor recv_sizes, IdType expand, IdType comm_type) {
+  return _SPAlltoAllWithDst<IdType, ncclInt64>(
+      input.data_ptr<IdType>(), output.data_ptr<IdType>(),
+      send_sizes.data_ptr<IdType>(), recv_sizes.data_ptr<IdType>(), expand,
+      comm_type);
 }
 
 template <typename T, ncclDataType_t NCCL_DATA_TYPE>
@@ -116,6 +161,60 @@ void SPFeatureAlltoAll(
     torch::Tensor input, torch::Tensor output, torch::Tensor send_sizes,
     torch::Tensor recv_sizes, IdType expand, IdType comm_type) {
   _SPFeatureAlltoAll<DataType, ncclFloat32>(
+      input.data_ptr<DataType>(), output.data_ptr<DataType>(),
+      send_sizes.data_ptr<IdType>(), recv_sizes.data_ptr<IdType>(), expand,
+      comm_type);
+}
+
+template <typename T, ncclDataType_t NCCL_DATA_TYPE>
+void _SPFeatureAlltoAllWithDst(
+    T* input, T* output, IdType* send_sizes, IdType* recv_sizes, IdType expand,
+    IdType comm_type) {
+  auto* state = NPCState::Global();
+  int world_size = state->world_size;
+  auto stream = at::cuda::getCurrentCUDAStream();
+  auto nccl_comm = state->nccl_comm_list[comm_type];
+  IdType send_off = 0;
+  IdType recv_off = 0;
+  ncclGroupStart();
+  // all-to-all dst
+  for (int r = 0; r < world_size; ++r) {
+    IdType send_size = send_sizes[3 * r];
+    IdType recv_size = recv_sizes[3 * r];
+
+    NCCLCHECK(ncclSend(
+        input + send_off * expand, send_size * expand, NCCL_DATA_TYPE, r,
+        nccl_comm, stream));
+    NCCLCHECK(ncclRecv(
+        output + recv_off * expand, recv_size * expand, NCCL_DATA_TYPE, r,
+        nccl_comm, stream));
+
+    send_off += send_size;
+    recv_off += recv_size;
+  }
+  // all-to-all src
+  for (int r = 0; r < world_size; ++r) {
+    IdType send_size = send_sizes[3 * r + 2];
+    IdType recv_size = recv_sizes[3 * r + 2];
+
+    NCCLCHECK(ncclSend(
+        input + send_off * expand, send_size * expand, NCCL_DATA_TYPE, r,
+        nccl_comm, stream));
+    NCCLCHECK(ncclRecv(
+        output + recv_off * expand, recv_size * expand, NCCL_DATA_TYPE, r,
+        nccl_comm, stream));
+
+    send_off += send_size;
+    recv_off += recv_size;
+  }
+  ncclGroupEnd();
+  CUDACHECK(cudaStreamSynchronize(stream));
+}
+
+void SPFeatureAlltoAllWithDst(
+    torch::Tensor input, torch::Tensor output, torch::Tensor send_sizes,
+    torch::Tensor recv_sizes, IdType expand, IdType comm_type) {
+  _SPFeatureAlltoAllWithDst<DataType, ncclFloat32>(
       input.data_ptr<DataType>(), output.data_ptr<DataType>(),
       send_sizes.data_ptr<IdType>(), recv_sizes.data_ptr<IdType>(), expand,
       comm_type);

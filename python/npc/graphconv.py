@@ -49,12 +49,12 @@ class SPGraphConv(nn.Module):
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
-    def forward(self, blocks, feat, fsi):
+    def forward(self, blocks, feat_src, fsi):
         # block2 fwd (VirtualNode, ori_neighbor)
         graph = blocks[0]
-        num_dst = fsi.num_dst
-        feat_dst = feat[:num_dst]
-        feat_src = feat[num_dst:]
+        # num_dst = fsi.num_dst
+        # feat_dst = feat[:num_dst]
+        # feat_src = feat[num_dst:]
         with graph.local_scope():
             if not self._allow_zero_in_degree:
                 if (graph.in_degrees() == 0).any():
@@ -69,6 +69,7 @@ class SPGraphConv(nn.Module):
                         "to be `True` when constructing this module will "
                         "suppress the check and let the code run."
                     )
+            """
             if self._norm in ["left", "both"]:
                 degs = graph.out_degrees().to(feat_src).clamp(min=1)
                 if self._norm == "both":
@@ -78,7 +79,7 @@ class SPGraphConv(nn.Module):
                 shp = norm.shape + (1,) * (feat_src.dim() - 1)
                 norm = torch.reshape(norm, shp)
                 feat_src = feat_src * norm
-
+            """
             # mult W first to reduce the feature size for aggregation.
             feat_src = torch.matmul(feat_src, self.weight)
             graph.srcdata["h"] = feat_src
@@ -119,6 +120,7 @@ class SPGraphConv(nn.Module):
             graph.update_all(fn.copy_u("h", "m"), fn.sum("m", "h"))
             rst = graph.dstdata["h"]
 
+            """
             if self._norm in ["right", "both"]:
                 degs = graph.in_degrees().to(feat_dst).clamp(min=1)
                 if self._norm == "both":
@@ -128,6 +130,7 @@ class SPGraphConv(nn.Module):
                 shp = norm.shape + (1,) * (feat_dst.dim() - 1)
                 norm = torch.reshape(norm, shp)
                 rst = rst * norm
+            """
 
             if self.bias is not None:
                 rst = rst + self.bias

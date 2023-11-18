@@ -10,7 +10,15 @@
 
 namespace npc {
 
+IdType SPSampleAlltoAllWithDst(
+    torch::Tensor input, torch::Tensor output, torch::Tensor send_sizes,
+    torch::Tensor recv_sizes, IdType expand = 1, IdType comm_type = 0);
+
 void SPSampleAlltoAll(
+    torch::Tensor input, torch::Tensor output, torch::Tensor send_sizes,
+    torch::Tensor recv_sizes, IdType expand = 1, IdType comm_type = 0);
+
+void SPFeatureAlltoAllWithDst(
     torch::Tensor input, torch::Tensor output, torch::Tensor send_sizes,
     torch::Tensor recv_sizes, IdType expand = 1, IdType comm_type = 0);
 

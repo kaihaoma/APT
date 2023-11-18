@@ -26,6 +26,16 @@ torch::Tensor SrcToVir(IdType fanout, IdType num_dst, torch::Tensor src) {
   return map_src;
 }
 
+torch::Tensor SrcDsttoVir(IdType fanout, torch::Tensor dst, torch::Tensor src) {
+  auto* state = NPCState::Global();
+  auto world_size = state->world_size;
+  auto shuffle_id_offset = state->shuffle_id_offset;
+  auto shuffle_min_vids = state->shuffle_min_vids;
+  auto map_allnodes = MapSrcDsttoVir(
+      world_size, fanout, dst, src, shuffle_id_offset, shuffle_min_vids);
+  return map_allnodes;
+}
+
 std::vector<torch::Tensor> NPSampleAndShuffle(
     torch::Tensor seeds, IdType fanout) {
   torch::Tensor shuffled_frontier, permutation, recv_offset, dev_offset;
@@ -39,15 +49,15 @@ std::vector<torch::Tensor> NPSampleAndShuffle(
 
 std::vector<torch::Tensor> SPSampleAndShuffle(
     IdType num_seeds, torch::Tensor send_frontier,
-    torch::Tensor sorted_allnodes, torch::Tensor unique_frontier) {
+    torch::Tensor sorted_allnodes, torch::Tensor unique_frontier,
+    IdType shuffle_with_dst) {
   auto* state = NPCState::Global();
   auto rank = state->rank;
   auto world_size = state->world_size;
   auto num_total_nodes = state->graph_storage.num_total_nodes;
 
-  // map src to vir
-  // rules: [belong, dst_idx]
-  // map = belong * base2 + dst_idx
+  auto sizes_per_rank = shuffle_with_dst ? 3 : 2;
+
   auto base2 = num_seeds;
 
   auto cuda_options = sorted_allnodes.options();
@@ -55,36 +65,66 @@ std::vector<torch::Tensor> SPSampleAndShuffle(
   // send_offset contains two parts sorted_allnodes idx:[0:world_size+1) and
   // unique_frontier idx:[world_size+1, 2*world_size+1)
   auto send_offset =
-      GetVirSendOffset(world_size, base2, sorted_allnodes, unique_frontier);
+      shuffle_with_dst
+          ? GetVirSendOffsetWithDst(
+                world_size, base2, sorted_allnodes, unique_frontier)
+          : GetVirSendOffset(
+                world_size, base2, sorted_allnodes, unique_frontier);
 
-  auto fir_uni = send_offset[world_size + 1].item<IdType>();
+  auto fir_uni =
+      send_offset[(sizes_per_rank - 1) * world_size + 1].item<IdType>();
   auto send_sizes = send_offset.diff();
-  send_sizes.index_put_({world_size}, fir_uni);
+  send_sizes.index_put_({(sizes_per_rank - 1) * world_size}, fir_uni);
 
-  send_sizes = send_sizes.index({state->sp_alltoall_size_permute}).contiguous();
+  if (shuffle_with_dst) {
+    send_sizes =
+        send_sizes.index({state->sp_alltoall_size_permute_step3}).contiguous();
+  } else {
+    send_sizes =
+        send_sizes.index({state->sp_alltoall_size_permute_step2}).contiguous();
+  }
 
-  auto arange = torch::arange(1, world_size + 1) * 2;
+  auto arange = torch::arange(1, world_size + 1) * sizes_per_rank;
+
   auto recv_sizes = torch::empty_like(send_sizes);
 
   AlltoAll(send_sizes, recv_sizes, arange, arange);
+
   // all-to-all packed (map_src & frontier)
   send_sizes = send_sizes.to(torch::kCPU);
   recv_sizes = recv_sizes.to(torch::kCPU);
 
-  auto feat_recv_sizes = torch::sum(recv_sizes.index({torch::indexing::Slice(
-                                        1, torch::indexing::None, 2)}))
-                             .item<IdType>();
+  auto feat_recv_sizes =
+      torch::sum(
+          recv_sizes.index({torch::indexing::Slice(
+              (sizes_per_rank - 1), torch::indexing::None, sizes_per_rank)}))
+          .item<IdType>();
 
   auto recv_size = torch::sum(recv_sizes).item<IdType>() - feat_recv_sizes;
 
-  auto recv_src = torch::empty(recv_size, cuda_options);
+  if (shuffle_with_dst) {
+    auto recv_allnodes = torch::empty(recv_size, cuda_options);
+    auto recv_dst_size = SPSampleAlltoAllWithDst(
+        send_frontier, recv_allnodes, send_sizes, recv_sizes);
+    // map src nodes
+    auto recv_src =
+        recv_allnodes.index({torch::indexing::Slice(recv_dst_size)});
+    auto recv_dst =
+        recv_allnodes.index({torch::indexing::Slice(0, recv_dst_size)});
 
-  SPSampleAlltoAll(send_frontier, recv_src, send_sizes, recv_sizes);
+    auto ori_src = recv_src % num_total_nodes;
+    auto vir_src = recv_src.div(num_total_nodes, "trunc");
 
-  auto ori_src = recv_src % num_total_nodes;
-  auto vir_src = recv_src.div(num_total_nodes, "trunc");
+    return {recv_dst, vir_src, ori_src, send_sizes, recv_sizes};
+  } else {
+    auto recv_src = torch::empty(recv_size, cuda_options);
+    SPSampleAlltoAll(send_frontier, recv_src, send_sizes, recv_sizes);
 
-  return {vir_src, ori_src, send_sizes, recv_sizes};
+    auto ori_src = recv_src % num_total_nodes;
+    auto vir_src = recv_src.div(num_total_nodes, "trunc");
+
+    return {vir_src, ori_src, send_sizes, recv_sizes};
+  }
 }
 
 std::vector<torch::Tensor> SPSampleShuffleSrc(torch::Tensor unique_src) {

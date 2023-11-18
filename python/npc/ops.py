@@ -1,7 +1,7 @@
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from typing import List, Tuple, Optional
+from typing import List, Union, Tuple, Optional
 import argparse
 import dgl
 import time
@@ -194,7 +194,7 @@ def cache_adj_and_feats(
 
                 node_feats_freqs = torch.zeros(num_total_nodes, dtype=torch.long)
                 node_feats_freqs[args.min_vids[rank] : args.min_vids[rank + 1]] = sum_freq_lists[args.min_vids[rank] : args.min_vids[rank + 1]]
-                sorted_idx = torch.sort(sum_freq_lists, descending=True)[1].cpu()
+                sorted_idx = torch.sort(node_feats_freqs, descending=True)[1].cpu()
                 del node_feats_freqs
                 del sum_freq_lists
 
@@ -412,6 +412,7 @@ def load_subtensor(args, sample_result):
             fsi,
         )
     elif args.system == "SP":
+        shuffle_with_dst = int(args.model != "GCN")
         if args.model == "GAT":
             # [0]input_nodes, [1]seeds, [2]blocks, [3]perm, [4]send_offset, [5]recv_offset
             fsi = NPFeatureShuffleInfo(
@@ -421,7 +422,7 @@ def load_subtensor(args, sample_result):
                 send_offset=sample_result[4].to("cpu"),
                 recv_offset=sample_result[5].to("cpu"),
             )
-        else:
+        elif args.model == "GCN":
             # [0]input_nodes [1] seeds, [2]blocks [3]send_size [4]recv_size
             send_sizes = sample_result[3].to("cpu")
             recv_sizes = sample_result[4].to("cpu")
@@ -436,6 +437,26 @@ def load_subtensor(args, sample_result):
                 num_dst=num_dst,
                 total_send_size=total_send_size,
                 total_recv_size=total_recv_size,
+                shuffle_with_dst=shuffle_with_dst,
+            )
+        else:
+            # [0]input_nodes [1]seeds, [2]blocks [3]send_size [4]recv_size
+            send_sizes = sample_result[3].to("cpu")
+            recv_sizes = sample_result[4].to("cpu")
+            num_send_dst = send_sizes[0::3].sum().item()
+            num_recv_dst = recv_sizes[0::3].sum().item()
+            num_dst = [num_send_dst, num_recv_dst]
+            total_send_size = num_send_dst + send_sizes[2::3].sum().item()
+            total_recv_size = num_recv_dst + recv_sizes[2::3].sum().item()
+
+            fsi = SPFeatureShuffleInfo(
+                feat_dim=args.num_hidden,
+                send_sizes=send_sizes,
+                recv_sizes=recv_sizes,
+                num_dst=num_dst,
+                total_send_size=total_send_size,
+                total_recv_size=total_recv_size,
+                shuffle_with_dst=shuffle_with_dst,
             )
 
         return (
@@ -542,9 +563,11 @@ class SPFeatureShuffleInfo(object):
     feat_dim: int
     send_sizes: torch.Tensor
     recv_sizes: torch.Tensor
-    num_dst: int
+    # int or tuple(int,int)
+    num_dst: Union[int, Tuple[int, int]]
     total_send_size: int
     total_recv_size: int
+    shuffle_with_dst: int = 0
 
 
 class SPFeatureShuffle(torch.autograd.Function):
@@ -561,6 +584,7 @@ class SPFeatureShuffle(torch.autograd.Function):
             fsi.send_sizes,
             fsi.total_send_size,
             fsi.feat_dim,
+            fsi.shuffle_with_dst,
         )
         return shuffle_result
 
@@ -576,6 +600,7 @@ class SPFeatureShuffle(torch.autograd.Function):
             fsi.recv_sizes,
             fsi.total_recv_size,
             fsi.feat_dim,
+            fsi.shuffle_with_dst,
         )
         return (None, shuffle_grad)
 
@@ -632,8 +657,9 @@ def sp_feat_shuffle(
     recv_sizes: torch.Tensor,
     total_recv_size: int,
     feat_dim: int,
+    shuffle_with_dst: int,
 ):
-    return torch.ops.npc.sp_feat_shuffle(input, send_sizes, recv_sizes, total_recv_size, feat_dim)
+    return torch.ops.npc.sp_feat_shuffle(input, send_sizes, recv_sizes, total_recv_size, feat_dim, shuffle_with_dst)
 
 
 def mp_feat_shuffle_fwd(
