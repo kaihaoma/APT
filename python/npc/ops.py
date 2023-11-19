@@ -412,7 +412,8 @@ def load_subtensor(args, sample_result):
             fsi,
         )
     elif args.system == "SP":
-        shuffle_with_dst = int(args.model != "GCN")
+        #shuffle_with_dst = int(args.model != "GCN")
+        shuffle_with_dst = False
         if args.model == "GAT":
             # [0]input_nodes, [1]seeds, [2]blocks, [3]perm, [4]send_offset, [5]recv_offset
             fsi = NPFeatureShuffleInfo(
@@ -422,7 +423,7 @@ def load_subtensor(args, sample_result):
                 send_offset=sample_result[4].to("cpu"),
                 recv_offset=sample_result[5].to("cpu"),
             )
-        elif args.model == "GCN":
+        elif args.model == "GCN" or args.model == "SAGE":
             # [0]input_nodes [1] seeds, [2]blocks [3]send_size [4]recv_size
             send_sizes = sample_result[3].to("cpu")
             recv_sizes = sample_result[4].to("cpu")

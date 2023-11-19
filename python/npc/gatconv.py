@@ -89,15 +89,27 @@ class SPGATConv(nn.Module):
         src_prefix_shape = dst_prefix_shape = feat.shape[:-1]
         src_prefix_shape = (graph.number_of_src_nodes(),) + src_prefix_shape[1:]
         dst_prefix_shape = (graph.number_of_dst_nodes(),) + dst_prefix_shape[1:]
+        
         h_src = self.feat_drop(feat)
         feat_src = self.fc(h_src)
-        # feat_dst = feat_src[:num_dst].view(*dst_prefix_shape, self._num_heads, self._out_feats)
-        # feat_src = feat_src[num_dst:]
+        shuffle_with_dst = False
+        #if shuffle_with_dst:
+        #    pass
+        #else:
+        feat_dst = feat_src[:num_dst].view(*dst_prefix_shape, self._num_heads, self._out_feats)
+        feat_src = feat_src[num_dst:]
+        
+            
 
         fsi.feat_dim = self._num_heads * self._out_feats
         feat_src = SPFeatureShuffleGAT.apply(fsi, feat_src)
-        feat_dst = feat_src[:num_dst].view(*dst_prefix_shape, self._num_heads, self._out_feats)
-        feat_src = feat_src[num_dst:].view(*src_prefix_shape, self._num_heads, self._out_feats)
+        #if not shuffle_with_dst:
+        #    feat_dst = feat_src[:num_dst].view(*dst_prefix_shape, self._num_heads, self._out_feats)
+        #    feat_src = feat_src[num_dst:].view(*src_prefix_shape, self._num_heads, self._out_feats)
+        #else:
+        feat_src = feat_src.view(*src_prefix_shape, self._num_heads, self._out_feats)
+
+            
 
         # block1 fwd, (ori_node, VirtualNode)
         with graph.local_scope():

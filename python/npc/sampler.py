@@ -171,7 +171,8 @@ class MixedPSNeighborSampler(object):
         assert system in ["DP", "NP", "MP", "SP"]
         self.system = system
         self.model = model
-        self.shuffle_with_dst = int(self.model != "GCN")
+        # self.shuffle_with_dst = int(self.model != "GCN")
+        self.shuffle_with_dst = False
         self.debug_flag = False
         self.num_total_nodes = num_total_nodes
         self.sp_base = 10000000
@@ -213,24 +214,26 @@ class MixedPSNeighborSampler(object):
                         unique_neigh, arange_src = torch.unique(neighbors, return_inverse=True)
                         arange_dst = torch.arange(num_dst, device=seeds.device).repeat_interleave(fanout)
                         block = create_block_from_coo(arange_src, arange_dst, unique_neigh.numel(), num_dst)
-                        """
-                        (
-                            shuffled_neigh,
-                            perm,
-                            send_offset,
-                            recv_offset,
-                        ) = sp_sample_shuffle_src(unique_neigh)
+                        if not self.shuffle_with_dst:
 
-                        blocks.insert(0, block)
-                        sampling_result = (perm, send_offset, recv_offset)
+                            (
+                                shuffled_neigh,
+                                perm,
+                                send_offset,
+                                recv_offset,
+                            ) = sp_sample_shuffle_src(unique_neigh)
 
-                        # seeds contains original dst nodes and recv src nodes
-                        seeds = torch.cat((seeds, shuffled_neigh))
-                        """
-                        shuffled_seeds_and_neigh, perm, send_offset, recv_offset = sp_sample_shuffle_src(torch.cat((seeds, unique_neigh)))
-                        blocks.insert(0, block)
-                        sampling_result = (perm, send_offset, recv_offset)
-                        seeds = shuffled_seeds_and_neigh
+                            blocks.insert(0, block)
+                            sampling_result = (perm, send_offset, recv_offset)
+
+                            # seeds contains original dst nodes and recv src nodes
+                            seeds = torch.cat((seeds, shuffled_neigh))
+
+                        else:
+                            shuffled_seeds_and_neigh, perm, send_offset, recv_offset = sp_sample_shuffle_src(torch.cat((seeds, unique_neigh)))
+                            blocks.insert(0, block)
+                            sampling_result = (perm, send_offset, recv_offset)
+                            seeds = shuffled_seeds_and_neigh
 
                     else:
                         device = seeds.device
@@ -272,13 +275,7 @@ class MixedPSNeighborSampler(object):
                                     + neighbors[perm_allnodes[num_dst:] - num_dst],
                                 )
                             )
-                            (
-                                recv_dst,
-                                recv_seeds,
-                                recv_neighbors,
-                                send_sizes,
-                                recv_sizes,
-                            ) = sp_sample_and_shuffle(
+                            (recv_dst, recv_seeds, recv_neighbors, send_sizes, recv_sizes,) = sp_sample_and_shuffle(
                                 num_dst,  # num_dst
                                 send_frontiers,  # send_frontiers
                                 sorted_allnodes,  # sorted_allnodes
@@ -294,12 +291,7 @@ class MixedPSNeighborSampler(object):
                                 self.rank * (self.sp_base * self.num_total_nodes) + perm_dst * self.num_total_nodes + neighbors[perm_mapsrc]
                             )
 
-                            (
-                                recv_seeds,
-                                recv_neighbors,
-                                send_sizes,
-                                recv_sizes,
-                            ) = sp_sample_and_shuffle(
+                            (recv_seeds, recv_neighbors, send_sizes, recv_sizes,) = sp_sample_and_shuffle(
                                 num_dst,  # num_dst
                                 send_frontier,  # send_frontier
                                 sorted_mapsrc,  # sorted_mapsrc
@@ -319,7 +311,10 @@ class MixedPSNeighborSampler(object):
                         if self.shuffle_with_dst:
                             seeds = torch.cat((recv_dst, unique_src))
                         else:
-                            seeds = unique_src
+                            if self.model == "GCN":
+                                seeds = unique_src
+                            else:
+                                seeds = torch.cat((seeds, unique_src))
 
                 elif self.system == "MP":
                     if self.model == "GAT":
