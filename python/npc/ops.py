@@ -412,8 +412,6 @@ def load_subtensor(args, sample_result):
             fsi,
         )
     elif args.system == "SP":
-        #shuffle_with_dst = int(args.model != "GCN")
-        shuffle_with_dst = False
         if args.model == "GAT":
             # [0]input_nodes, [1]seeds, [2]blocks, [3]perm, [4]send_offset, [5]recv_offset
             fsi = NPFeatureShuffleInfo(
@@ -423,24 +421,7 @@ def load_subtensor(args, sample_result):
                 send_offset=sample_result[4].to("cpu"),
                 recv_offset=sample_result[5].to("cpu"),
             )
-        elif args.model == "GCN" or args.model == "SAGE":
-            # [0]input_nodes [1] seeds, [2]blocks [3]send_size [4]recv_size
-            send_sizes = sample_result[3].to("cpu")
-            recv_sizes = sample_result[4].to("cpu")
-            num_dst = sample_result[2][2].number_of_src_nodes()
-            total_send_size = send_sizes[1::2].sum().item()
-            total_recv_size = recv_sizes[1::2].sum().item()
-
-            fsi = SPFeatureShuffleInfo(
-                feat_dim=args.num_hidden,
-                send_sizes=send_sizes,
-                recv_sizes=recv_sizes,
-                num_dst=num_dst,
-                total_send_size=total_send_size,
-                total_recv_size=total_recv_size,
-                shuffle_with_dst=shuffle_with_dst,
-            )
-        else:
+        elif args.shuffle_with_dst:
             # [0]input_nodes [1]seeds, [2]blocks [3]send_size [4]recv_size
             send_sizes = sample_result[3].to("cpu")
             recv_sizes = sample_result[4].to("cpu")
@@ -457,7 +438,25 @@ def load_subtensor(args, sample_result):
                 num_dst=num_dst,
                 total_send_size=total_send_size,
                 total_recv_size=total_recv_size,
-                shuffle_with_dst=shuffle_with_dst,
+                shuffle_with_dst=args.shuffle_with_dst,
+            )
+        else:
+            # elif args.model == "GCN" or args.model == "SAGE":
+            # [0]input_nodes [1] seeds, [2]blocks [3]send_size [4]recv_size
+            send_sizes = sample_result[3].to("cpu")
+            recv_sizes = sample_result[4].to("cpu")
+            num_dst = sample_result[2][2].number_of_src_nodes()
+            total_send_size = send_sizes[1::2].sum().item()
+            total_recv_size = recv_sizes[1::2].sum().item()
+
+            fsi = SPFeatureShuffleInfo(
+                feat_dim=args.num_hidden,
+                send_sizes=send_sizes,
+                recv_sizes=recv_sizes,
+                num_dst=num_dst,
+                total_send_size=total_send_size,
+                total_recv_size=total_recv_size,
+                shuffle_with_dst=args.shuffle_with_dst,
             )
 
         return (

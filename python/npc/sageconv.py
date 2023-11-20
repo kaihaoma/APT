@@ -14,6 +14,7 @@ class SPSAGEConv(nn.Module):
         in_feats,
         out_feats,
         aggregator_type,
+        shuffle_with_dst=False,
         remote_stream=None,
         feat_drop=0.0,
         bias=True,
@@ -26,6 +27,7 @@ class SPSAGEConv(nn.Module):
         self._in_dst_feats = in_feats
         self._out_feats = out_feats
         self._aggre_type = aggregator_type
+        self.shuffle_with_dst = shuffle_with_dst
         self._remote_stream = remote_stream
         self.norm = norm
         self.feat_drop = nn.Dropout(feat_drop)
@@ -43,49 +45,47 @@ class SPSAGEConv(nn.Module):
     def forward(self, blocks, feat, fsi):
         # block2 fwd (VirtualNode, ori_neighbor)
         graph = blocks[0]
-        shuffle_with_dst = False
-        #if shuffle_with_dst:
-        #    num_send_dst, num_recv_dst = fsi.num_dst
-        #else:
-        num_dst = fsi.num_dst
-        feat_all = self.feat_drop(feat)
-        
 
-        #if shuffle_with_dst:
-        #    h_dst = self.fc_self(feat_all[:num_recv_dst])
-        #    feat_src = feat_all[num_recv_dst:]
-        #else:
-        h_dst = self.fc_self(feat_all[:num_dst])
-        feat_src = feat_all[num_dst:]
-        
+        if self.shuffle_with_dst:
+            num_send_dst, num_recv_dst = fsi.num_dst
+        else:
+            num_dst = fsi.num_dst
+        feat_all = self.feat_drop(feat)
+
+        if self.shuffle_with_dst:
+            h_dst = self.fc_self(feat_all[:num_recv_dst])
+            feat_src = feat_all[num_recv_dst:]
+        else:
+            h_dst = self.fc_self(feat_all[:num_dst])
+            feat_src = feat_all[num_dst:]
+
         with graph.local_scope():
             # Message Passing
             graph.srcdata["h"] = self.fc_neigh(feat_src)
+            # print(f"[Note]graph:{graph}, graph_dev:{graph.device}")
             graph.update_all(fn.copy_u("h", "m"), fn.mean("m", "neigh"))
             h_vir = graph.dstdata["neigh"]
 
-
-        #if shuffle_with_dst:
-        #    shuffle_feat = SPFeatureShuffle.apply(fsi, torch.cat([h_dst, h_vir], dim=0))
-        #else:
-        shuffle_feat = SPFeatureShuffle.apply(fsi, h_vir)
+        if self.shuffle_with_dst:
+            shuffle_feat = SPFeatureShuffle.apply(fsi, torch.cat([h_dst, h_vir], dim=0))
+        else:
+            shuffle_feat = SPFeatureShuffle.apply(fsi, h_vir)
 
         # block1 fwd, (ori_node, VirtualNode)
         graph = blocks[1]
         with graph.local_scope():
-            #if shuffle_with_dst:
-            #    graph.srcdata["h"] = shuffle_feat[num_send_dst:]
-            #else:
-            graph.srcdata["h"] = shuffle_feat
+            if self.shuffle_with_dst:
+                graph.srcdata["h"] = shuffle_feat[num_send_dst:]
+            else:
+                graph.srcdata["h"] = shuffle_feat
             # Message Passing
             graph.update_all(fn.copy_u("h", "m"), fn.mean("m", "neigh"))
             h_neigh = graph.dstdata["neigh"]
 
-
-            #if shuffle_with_dst:
-            #    h_self = shuffle_feat[:num_send_dst]
-            #else:
-            h_self = h_dst
+            if self.shuffle_with_dst:
+                h_self = shuffle_feat[:num_send_dst]
+            else:
+                h_self = h_dst
             rst = h_self + h_neigh
 
             # activation

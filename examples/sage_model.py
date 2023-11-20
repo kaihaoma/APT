@@ -133,6 +133,7 @@ class SPSAGE(nn.Module):
             args.num_classes,
             activation,
             args.dropout,
+            args.shuffle_with_dst,
         )
 
     def init(
@@ -143,6 +144,7 @@ class SPSAGE(nn.Module):
         n_classes,
         activation,
         dropout,
+        shuffle_with_dst,
     ):
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
@@ -151,7 +153,14 @@ class SPSAGE(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(npc.SPSAGEConv(in_feats, n_hidden, "mean"))
+            self.layers.append(
+                npc.SPSAGEConv(
+                    in_feats,
+                    n_hidden,
+                    "mean",
+                    shuffle_with_dst=shuffle_with_dst,
+                )
+            )
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.SAGEConv(n_hidden, n_hidden, "mean"))
             self.layers.append(dglnn.SAGEConv(n_hidden, n_classes, "mean"))

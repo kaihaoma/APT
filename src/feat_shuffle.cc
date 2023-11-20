@@ -37,6 +37,7 @@ torch::Tensor SPFeatShuffle(
   auto flatten_inputs = inputs.flatten();
   auto flatten_outputs =
       torch::empty(total_recv_size * expand, inputs.options());
+
   if (shuffle_with_dst) {
     SPFeatureAlltoAllWithDst(
         flatten_inputs, flatten_outputs, send_sizes, recv_sizes, expand,

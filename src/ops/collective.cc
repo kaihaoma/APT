@@ -154,7 +154,7 @@ void _SPFeatureAlltoAll(
     recv_off += recv_size;
   }
   ncclGroupEnd();
-  CUDACHECK(cudaStreamSynchronize(stream));
+  // CUDACHECK(cudaStreamSynchronize(stream));
 }
 
 void SPFeatureAlltoAll(
@@ -208,7 +208,7 @@ void _SPFeatureAlltoAllWithDst(
     recv_off += recv_size;
   }
   ncclGroupEnd();
-  CUDACHECK(cudaStreamSynchronize(stream));
+  // CUDACHECK(cudaStreamSynchronize(stream));
 }
 
 void SPFeatureAlltoAllWithDst(
@@ -246,7 +246,7 @@ void _AlltoAll(
     recv_off = recv_offset[r];
   }
   ncclGroupEnd();
-  CUDACHECK(cudaStreamSynchronize(stream));
+  // CUDACHECK(cudaStreamSynchronize(stream));
 }
 
 void AlltoAll(
@@ -295,7 +295,7 @@ void _CrossMachineAlltoAll(
   cudaMemcpyAsync(
       output, input, send_size[0] * expand * sizeof(T),
       cudaMemcpyDeviceToDevice, stream);
-  CUDACHECK(cudaStreamSynchronize(stream));
+  // CUDACHECK(cudaStreamSynchronize(stream));
 }
 
 void CrossMachineAlltoAll(
@@ -335,7 +335,7 @@ void _AllBroadcast(
     recv_off += recv_size[r];
   }
   ncclGroupEnd();
-  CUDACHECK(cudaStreamSynchronize(stream));
+  // CUDACHECK(cudaStreamSynchronize(stream));
 }
 
 void AllBroadcast(
@@ -377,7 +377,7 @@ void _AllBroadcastV2(
     send_off += send_size;
   }
   ncclGroupEnd();
-  CUDACHECK(cudaStreamSynchronize(stream));
+  // CUDACHECK(cudaStreamSynchronize(stream));
 }
 
 void AllBroadcastV2(
@@ -418,7 +418,7 @@ void _AllReduce(
     send_offset += send_size[r];
   }
   ncclGroupEnd();
-  CUDACHECK(cudaStreamSynchronize(stream));
+  // CUDACHECK(cudaStreamSynchronize(stream));
 }
 
 void AllReduce(

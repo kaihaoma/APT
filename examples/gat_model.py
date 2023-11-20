@@ -189,9 +189,10 @@ class SPGAT(nn.Module):
             heads,
             activation,
             args.dropout,
+            args.shuffle_with_dst,
         )
 
-    def init(self, fan_out, in_feats, n_hidden, n_classes, heads, activation, dropout):
+    def init(self, fan_out, in_feats, n_hidden, n_classes, heads, activation, dropout, shuffle_with_dst):
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
         self.in_feats = in_feats
@@ -204,6 +205,7 @@ class SPGAT(nn.Module):
                     in_feats,
                     n_hidden,
                     heads[0],
+                    shuffle_with_dst=shuffle_with_dst,
                     feat_drop=dropout,
                     attn_drop=dropout,
                     activation=activation,

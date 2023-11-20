@@ -162,6 +162,7 @@ class MixedPSNeighborSampler(object):
         system,
         model,
         num_total_nodes,
+        shuffle_with_dst=False,
         debug_info=None,
     ):
         self.rank = rank
@@ -171,8 +172,7 @@ class MixedPSNeighborSampler(object):
         assert system in ["DP", "NP", "MP", "SP"]
         self.system = system
         self.model = model
-        # self.shuffle_with_dst = int(self.model != "GCN")
-        self.shuffle_with_dst = False
+        self.shuffle_with_dst = shuffle_with_dst
         self.debug_flag = False
         self.num_total_nodes = num_total_nodes
         self.sp_base = 10000000
@@ -215,7 +215,6 @@ class MixedPSNeighborSampler(object):
                         arange_dst = torch.arange(num_dst, device=seeds.device).repeat_interleave(fanout)
                         block = create_block_from_coo(arange_src, arange_dst, unique_neigh.numel(), num_dst)
                         if not self.shuffle_with_dst:
-
                             (
                                 shuffled_neigh,
                                 perm,
@@ -275,7 +274,13 @@ class MixedPSNeighborSampler(object):
                                     + neighbors[perm_allnodes[num_dst:] - num_dst],
                                 )
                             )
-                            (recv_dst, recv_seeds, recv_neighbors, send_sizes, recv_sizes,) = sp_sample_and_shuffle(
+                            (
+                                recv_dst,
+                                recv_seeds,
+                                recv_neighbors,
+                                send_sizes,
+                                recv_sizes,
+                            ) = sp_sample_and_shuffle(
                                 num_dst,  # num_dst
                                 send_frontiers,  # send_frontiers
                                 sorted_allnodes,  # sorted_allnodes
@@ -291,7 +296,12 @@ class MixedPSNeighborSampler(object):
                                 self.rank * (self.sp_base * self.num_total_nodes) + perm_dst * self.num_total_nodes + neighbors[perm_mapsrc]
                             )
 
-                            (recv_seeds, recv_neighbors, send_sizes, recv_sizes,) = sp_sample_and_shuffle(
+                            (
+                                recv_seeds,
+                                recv_neighbors,
+                                send_sizes,
+                                recv_sizes,
+                            ) = sp_sample_and_shuffle(
                                 num_dst,  # num_dst
                                 send_frontier,  # send_frontier
                                 sorted_mapsrc,  # sorted_mapsrc

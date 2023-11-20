@@ -182,9 +182,6 @@ def determine_feature_reside_cpu(args, global_node_feats: torch.Tensor, shared_t
                 localnode_feats_idx = torch.arange(args.min_vids[st], args.min_vids[en])
             else:
                 # For load dryrun result
-                key = "npc" if args.system == "NP" else "ori"
-                fanout_info = str(args.fan_out).replace(" ", "")
-                config_key = args.configs_path.split("/")[-2]
                 local_freq_lists = [torch.load(f"{args.dryrun_file_path}/rk#{r}_epo100.pt")[1] for r in range(st, en)]
                 sum_freqs = torch.stack(local_freq_lists, dim=0).sum(dim=0)
                 sort_freqs_idx = torch.sort(sum_freqs, descending=True)[1]

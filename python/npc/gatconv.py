@@ -16,6 +16,7 @@ class SPGATConv(nn.Module):
         in_feats,
         out_feats,
         num_heads,
+        shuffle_with_dst=False,
         feat_drop=0.0,
         attn_drop=0.0,
         negative_slope=0.2,
@@ -29,6 +30,7 @@ class SPGATConv(nn.Module):
         self._num_heads = num_heads
         self._in_src_feats, self._in_dst_feats = in_feats, in_feats
         self._out_feats = out_feats
+        self.shuffle_with_dst = shuffle_with_dst
         self._allow_zero_in_degree = allow_zero_in_degree
         self.fc = nn.Linear(self._in_src_feats, out_feats * num_heads, bias=False)
         self.attn_l = nn.Parameter(torch.FloatTensor(size=(1, num_heads, out_feats)))
@@ -89,27 +91,23 @@ class SPGATConv(nn.Module):
         src_prefix_shape = dst_prefix_shape = feat.shape[:-1]
         src_prefix_shape = (graph.number_of_src_nodes(),) + src_prefix_shape[1:]
         dst_prefix_shape = (graph.number_of_dst_nodes(),) + dst_prefix_shape[1:]
-        
+
         h_src = self.feat_drop(feat)
         feat_src = self.fc(h_src)
-        shuffle_with_dst = False
-        #if shuffle_with_dst:
-        #    pass
-        #else:
-        feat_dst = feat_src[:num_dst].view(*dst_prefix_shape, self._num_heads, self._out_feats)
-        feat_src = feat_src[num_dst:]
-        
-            
+
+        if self.shuffle_with_dst:
+            pass
+        else:
+            feat_dst = feat_src[:num_dst].view(*dst_prefix_shape, self._num_heads, self._out_feats)
+            feat_src = feat_src[num_dst:]
 
         fsi.feat_dim = self._num_heads * self._out_feats
         feat_src = SPFeatureShuffleGAT.apply(fsi, feat_src)
-        #if not shuffle_with_dst:
-        #    feat_dst = feat_src[:num_dst].view(*dst_prefix_shape, self._num_heads, self._out_feats)
-        #    feat_src = feat_src[num_dst:].view(*src_prefix_shape, self._num_heads, self._out_feats)
-        #else:
-        feat_src = feat_src.view(*src_prefix_shape, self._num_heads, self._out_feats)
-
-            
+        if self.shuffle_with_dst:
+            feat_dst = feat_src[:num_dst].view(*dst_prefix_shape, self._num_heads, self._out_feats)
+            feat_src = feat_src[num_dst:].view(*src_prefix_shape, self._num_heads, self._out_feats)
+        else:
+            feat_src = feat_src.view(*src_prefix_shape, self._num_heads, self._out_feats)
 
         # block1 fwd, (ori_node, VirtualNode)
         with graph.local_scope():

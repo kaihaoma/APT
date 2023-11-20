@@ -7,10 +7,11 @@ import importlib
 
 def get_pre_defined_args(tag_prefix):
     num_try_times = 1
-    # cache_memory_in_gbs = [1]
-    cache_memory_in_gbs = list(range(8))
-    system = ["SP"]
-    models = ["SAGE", "GCN", "GAT"]
+    cache_memory_in_gbs = [1]
+    # cache_memory_in_gbs = list(range(8))
+    system = ["NP", "SP", "MP"]
+    models = ["SAGE"]
+
     # num_localnode_feats_in_workers = list(range(4, 8))
     num_localnode_feats_in_workers = [-1]
     # generate args
@@ -68,9 +69,12 @@ if __name__ == "__main__":
         for key, value in inputs.items():
             setattr(args, key, value)
         if args.model == "GAT":
-            #assert args.num_heads == 8
+            # assert args.num_heads == 8
             args.num_heads = 4
             args.num_hidden = 8
+        else:
+            args.num_hidden = 16
+
         utils.show_args(args)
         shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(args, global_nfeat, shared_tensor_list)
         # reimport train.py

@@ -28,7 +28,6 @@ class SPGraphConv(nn.Module):
         self._out_feats = out_feats
         self._norm = norm
         self._allow_zero_in_degree = allow_zero_in_degree
-
         if weight:
             self.weight = nn.Parameter(torch.Tensor(in_feats, out_feats))
         else:
