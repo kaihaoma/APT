@@ -275,8 +275,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         args.num_epochs = 1
         """
 
-        record_flag = False
-        record_list = [[] for _ in range(6)]
+        record_list = []
         for epoch in range(args.num_epochs):
             epoch_tic_start = utils.get_time()
             # t2 = utils.get_time()
@@ -345,8 +344,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     total_time[1] += ms_loading_time
                     total_time[2] += ms_training_time
 
-                    # record mini-batches stage time
-                    """
                     record_val = [
                         ms_sampling_time,
                         # t0 - bt0,
@@ -356,53 +353,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                         # t2 - bt2,
                     ]
                     record_list.append(record_val)
-                    """
-                    """
-                    if record_flag and args.model != "GAT" and not args.debug:
-                        # V_shuffle, V_reshuffle, cache_miss, ms_loading_time
-                        if args.system == "DP":
-                            ms_record = [0, 0]
-                        elif args.system == "NP":
-                            send_offset = sample_result[4].tolist()
-                            recv_offset = sample_result[5].tolist()
-                            total_send = send_offset[world_size - 1] - send_offset[rank] + (send_offset[rank - 1] if rank > 0 else 0)
-                            total_recv = recv_offset[world_size - 1] - recv_offset[rank] + (recv_offset[rank - 1] if rank > 0 else 0)
-                            ms_record = [total_send + total_recv, 2 * args.num_hidden * (total_send + total_recv)]
-                        elif args.system == "SP":
-                            send_sizes = sample_result[3].tolist()
-                            recv_sizes = sample_result[4].tolist()
-                            total_shuffle = 0
-                            total_reshuffle = 0
-                            for r in range(world_size):
-                                if r != rank:
-                                    total_shuffle += send_sizes[2 * r] + recv_sizes[2 * r]
-                                    total_reshuffle += 2 * args.num_hidden * (send_sizes[2 * r + 1] + recv_sizes[2 * r + 1])
-                            ms_record = [total_shuffle, total_reshuffle]
-
-                        elif args.system == "MP":
-                            # total_shuffle = sum(recv_frontier_size) + recv_frontier_size[rank] * (world_size-2) + sum(recv_coo_size) + recv_coo_size[rank] * (world_size-2)
-                            recv_frontier_size = sample_result[2][0][2]
-                            recv_coo_size = sample_result[2][0][3]
-                            total_shuffle = (
-                                recv_frontier_size[rank].item() * (world_size - 2)
-                                + sum(recv_frontier_size).item()
-                                + recv_coo_size[rank].item() * (world_size - 2)
-                                + sum(recv_coo_size).item()
-                            )
-
-                            send_size = sample_result[3]  # shape: [1]
-                            recv_size = sample_result[4]  # shape: [world_size]
-
-                            # 2 * means forward + backward
-                            total_reshuffle = 2 * args.num_hidden * (send_size.item() * (world_size - 2) + sum(recv_size).item())
-                            ms_record = [total_shuffle, total_reshuffle]
-
-                        cache_miss = sample_result[0].numel() - torch.sum(cache_mask[sample_result[0].cpu()]).item()
-                        ms_record.extend([cache_miss, ms_sampling_time, ms_loading_time, ms_training_time])
-
-                        for i in range(6):
-                            record_list[i].append(ms_record[i])
-                        """
 
                 if step >= LIMIT_BATCHES:
                     break
@@ -434,23 +384,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     )
                     print(f"[Note]{acc_str}")
                     acc_file.write(acc_str)
-        """
-        # write mean of record to csv_path
-        if record_flag and args.model != "GAT" and not args.debug:
-            record_path = f"./logs/costmodel/Nov20_sm_all.csv"
-            avg_record = [round(sum(record_list[i]) / len(record_list[i]), 2) for i in range(6)]
-            input_tensor = torch.tensor(avg_record, device=device)
-            output_list = [torch.empty(6, device=device) for _ in range(world_size)] if rank == 0 else None
-            dist.gather(input_tensor, output_list, 0)
-            if rank == 0:
-                print(f"[Note] Write records to {record_path}")
-                with open(record_path, "a") as f:
-                    writer = csv.writer(f, lineterminator="\n")
-                    for r in range(world_size):
-                        tag = f"{args.tag}_{args.system}_rk#{r}"
-                        write_list = [tag] + output_list[r].tolist()
-                        writer.writerow(write_list)
-        """
+
         if args.debug and rank == 0:
             acc_file.close()
             print(f"[Note]Acc file save to {acc_file_path}")
@@ -460,14 +394,12 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
             avg_time_epoch_training = round(total_time[2] / num_record_epochs, 4)
 
             # write record to csv file
-            """
+
             record_path = f"./logs/record/{args.tag}.csv"
             with open(record_path, "a") as f:
                 writer = csv.writer(f, lineterminator="\n")
                 writer.writerows(record_list)
-            """
 
-            """
             # cross-machine feature loading variance check
             check_flag = True
             fail_idx = []
@@ -478,10 +410,10 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 if variance > 2:
                     check_flag = False
                     fail_idx.append(cid)
-            
+
             if not check_flag:
                 args.tag = f"variance{fail_idx}_{args.tag}"
-            """
+
             with open(args.logs_dir, "a") as f:
                 writer = csv.writer(f, lineterminator="\n")
                 # Tag, System, Dataset, Model, Machines, local batch_size, fanout, cache_mode, cache_memory, cache_value, feat cache node, feat cache element, graph cache node, graph cache element, num_epochs, num batches per epoch, Sampling time, Loading time, Training time,
@@ -493,6 +425,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
                 log_info = [
                     write_tag,
+                    world_size,
                     args.model,
                     args.batch_size,
                     args.input_dim,
@@ -504,8 +437,8 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     cache_value,
                     num_cached_feat_nodes,
                     num_cached_feat_elements,
-                    num_cached_graph_nodes,
-                    num_cached_graph_elements,
+                    # num_cached_graph_nodes,
+                    # num_cached_graph_elements,
                     num_record_epochs,
                     num_batches_per_epoch,
                     round(avg_time_epoch_sampling, 2),
