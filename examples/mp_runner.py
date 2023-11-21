@@ -5,27 +5,44 @@ import atexit
 import importlib
 
 
-def get_pre_defined_args(tag_prefix):
+def get_pre_defined_args(args):
+    fanout_info = str(args.fan_out).replace(" ", "")
+    config_key = args.configs_path.split("/")[-2]
     num_try_times = 1
-    cache_memory_in_gbs = [1]
-    # cache_memory_in_gbs = list(range(8))
-    system = ["NP", "SP", "MP"]
-    models = ["SAGE"]
+    # cache_memory_in_gbs = [1]
+    cache_memory_in_gbs = list(range(8))
+    system = ["DP", "NP", "SP", "MP"]
+    models = ["SAGE", "GCN", "GAT"]
 
     # num_localnode_feats_in_workers = list(range(4, 8))
     num_localnode_feats_in_workers = [-1]
     # generate args
-    for cache_mem in cache_memory_in_gbs:
-        for try_times in range(num_try_times):
+    for try_times in range(num_try_times):
+        for cache_mem in cache_memory_in_gbs:
             for nl in num_localnode_feats_in_workers:
                 for sys in system:
                     for model in models:
                         cm = cache_mem * 1024 * 1024 * 1024
                         # cross-machine feat loading case
                         tag = f"t{try_times}_{sys}_{model}_nl{nl}of8_cm{cache_mem}GB"
+                        # model specific
+                        num_heads, num_hidden = (4, 8) if model == "GAT" else (-1, 16)
+                        key = "npc" if sys == "NP" else "ori"
+
+                        # dryrun path
+                        dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"
                         # single-machine case
                         # tag = f"{tag_prefix}_{sys}_cm{cache_mem}GB"
-                        yield {"system": sys, "model": model, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
+                        yield {
+                            "system": sys,
+                            "model": model,
+                            "cache_memory": cm,
+                            "num_localnode_feats_in_workers": nl,
+                            "tag": tag,
+                            "num_heads": num_heads,
+                            "num_hidden": num_hidden,
+                            "dryrun_file_path": dryrun_file_path,
+                        }
 
 
 def get_user_input(tag_prefix):
@@ -64,16 +81,10 @@ if __name__ == "__main__":
     print(f"[Note]procs:{nproc}\t world_size:{world_size}\t ranks:{ranks}\t local_ranks:{local_ranks}")
 
     train_module = importlib.import_module("train")
-    for inputs in get_pre_defined_args(args.tag):
+    for inputs in get_pre_defined_args(args):
         # for inputs in get_user_input(args.tag):
         for key, value in inputs.items():
             setattr(args, key, value)
-        if args.model == "GAT":
-            # assert args.num_heads == 8
-            args.num_heads = 4
-            args.num_hidden = 8
-        else:
-            args.num_hidden = 16
 
         utils.show_args(args)
         shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(args, global_nfeat, shared_tensor_list)

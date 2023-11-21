@@ -347,11 +347,7 @@ def init_args(args=None) -> argparse.Namespace:
         args.cache_memory = args.cache_memory * 1024 * 1024 * 1024
 
     # define dryrun file path
-    key = "npc" if args.system == "NP" else "ori"
-    fanout_info = str(args.fan_out).replace(" ", "")
-    config_key = args.configs_path.split("/")[-2]
-    print(f"[Note]key:{key}\t sys:{args.system}\t fanout:{fanout_info}\t config_key:{config_key}")
-    args.dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"
+    args.dryrun_file_path = ""
 
     """
     fanout_info = str(args.fan_out).replace(" ", "")
