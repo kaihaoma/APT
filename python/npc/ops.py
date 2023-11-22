@@ -168,6 +168,8 @@ def cache_adj_and_feats(
         cache_graph_node_idx = torch.tensor([], dtype=torch.long)
         print(f"[Note]Rk#{rank} Caching mode:{args.cache_mode} Cache node_feats")
 
+        print(f"[Note]load dryrun for sys {args.system} from {args.dryrun_file_path}")
+
         # load dryrun result
         if args.system in ["NP"]:
             caching_candidate_path = f"{args.dryrun_file_path}/rk#{rank}_epo100.pt"
@@ -314,11 +316,17 @@ def load_partition(
 
     if args.system == "MP":
         print(f"[Note]Rk#{rank} cumsum_feat_dim:{args.cumsum_feat_dim}\t my:{args.cumsum_feat_dim[rank]} - {args.cumsum_feat_dim[rank+1]}")
-        cached_feats = localnode_feats[
-            cache_feat_node_pos,
-            args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1],
-        ].to(device)
-        feat_dim_offset = args.cumsum_feat_dim[rank]
+        # single machine scenario
+        if args.num_localnode_feats_in_workers == -1:
+            cached_feats = localnode_feats[
+                cache_feat_node_pos,
+                args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1],
+            ].to(device)
+            feat_dim_offset = args.cumsum_feat_dim[rank]
+        else:
+            # multi machine scenario
+            cached_feats = localnode_feats[cache_feat_node_pos].to(device)
+            feat_dim_offset = 0
     else:
         cached_feats = localnode_feats[cache_feat_node_pos].to(device)
         feat_dim_offset = 0

@@ -159,9 +159,8 @@ def determine_feature_reside_cpu(args, global_node_feats, shared_tensor_list: Li
         print(f"[Note]Node#{args.node_rank}\t remote_worker_id:{remote_worker_id}\t #remote_worker:{args.num_remote_worker}")
 
         # determine local uva feats
-        # [NOTE] MP has different partition scheme on node feats
-        if args.system == "MP" or args.num_localnode_feats_in_workers == -1:
-            # all feats
+        # cache all feats
+        if args.num_localnode_feats_in_workers == -1:
             args.num_localnode_feats = total_nodes
             localnode_feats_idx = torch.arange(total_nodes)
             print(f"[Note]Localnode feats: ALL :{args.system}\t num_localnode_feats:{args.num_localnode_feats}")
@@ -183,6 +182,7 @@ def determine_feature_reside_cpu(args, global_node_feats, shared_tensor_list: Li
                 localnode_feats_idx = torch.arange(args.min_vids[st], args.min_vids[en])
             else:
                 # For load dryrun result
+                print(f"[Note]load dryrun for sys {args.system} from {args.dryrun_file_path}")
                 local_freq_lists = [torch.load(f"{args.dryrun_file_path}/rk#{r}_epo100.pt")[1] for r in range(st, en)]
                 sum_freqs = torch.stack(local_freq_lists, dim=0).sum(dim=0)
                 sort_freqs_idx = torch.sort(sum_freqs, descending=True)[1]
