@@ -163,8 +163,18 @@ def determine_feature_reside_cpu(args, global_node_feats, shared_tensor_list: Li
         if args.num_localnode_feats_in_workers == -1:
             args.num_localnode_feats = total_nodes
             localnode_feats_idx = torch.arange(total_nodes)
-            print(f"[Note]Localnode feats: ALL :{args.system}\t num_localnode_feats:{args.num_localnode_feats}")
             localnode_feats = global_node_feats if global_node_feats is not None else torch.rand((total_nodes, input_dim), dtype=torch.float32)
+            print(f"[Note]Localnode feats: ALL :{args.system}\t localnode_feats shape:{localnode_feats.shape}")
+        elif args.system == "MP":
+            args.num_localnode_feats = total_nodes
+            localnode_feats_idx = torch.arange(total_nodes)
+            mp_input_dim = args.cumsum_feat_dim[en] - args.cumsum_feat_dim[st]
+            localnode_feats = (
+                global_node_feats[:, args.cumsum_feaet_dim[st] : args.cumsum_feat_dim[en]]
+                if global_node_feats is not None
+                else torch.rand((args.num_localnode_feats, mp_input_dim), dtype=torch.float32)
+            )
+            print(f"[Note]MP Localnode feats: ALL :{args.system}\t localnode_feats shape:{localnode_feats.shape}")
         else:
             # part of feats, [local_partition_nods, total_nodes]
             min_req = args.min_vids[en] - args.min_vids[st]
@@ -198,7 +208,7 @@ def determine_feature_reside_cpu(args, global_node_feats, shared_tensor_list: Li
             args.cross_machine_feat_load = True
     else:
         localnode_feats_idx = torch.arange(total_nodes)
-        localnode_feats = global_node_feats
+        localnode_feats = global_node_feats if global_node_feats is not None else torch.rand((total_nodes, input_dim), dtype=torch.float32)
 
     print(f"[Note]#localnode_feats: {localnode_feats_idx.numel()} of {total_nodes}")
 
