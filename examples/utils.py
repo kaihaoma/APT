@@ -135,8 +135,9 @@ def build_tensorboard_profiler(profiler_log_path):
     )
 
 
-def determine_feature_reside_cpu(args, global_node_feats: torch.Tensor, shared_tensor_list: List):
+def determine_feature_reside_cpu(args, global_node_feats, shared_tensor_list: List):
     total_nodes = args.num_nodes
+    input_dim = args.input_dim
     args.cross_machine_feat_load = False
     # multi-machine scenario
     # determine remote_worker_map & remote_worker_id
@@ -164,7 +165,7 @@ def determine_feature_reside_cpu(args, global_node_feats: torch.Tensor, shared_t
             args.num_localnode_feats = total_nodes
             localnode_feats_idx = torch.arange(total_nodes)
             print(f"[Note]Localnode feats: ALL :{args.system}\t num_localnode_feats:{args.num_localnode_feats}")
-            localnode_feats = global_node_feats
+            localnode_feats = global_node_feats if global_node_feats is not None else torch.rand((total_nodes, input_dim), dtype=torch.float32)
         else:
             # part of feats, [local_partition_nods, total_nodes]
             min_req = args.min_vids[en] - args.min_vids[st]
@@ -189,7 +190,11 @@ def determine_feature_reside_cpu(args, global_node_feats: torch.Tensor, shared_t
                 add_num_localnode_feats = args.num_localnode_feats - min_req
                 print(f"[Note]add_num_localnode_feats:{add_num_localnode_feats}")
                 localnode_feats_idx = torch.cat((torch.arange(args.min_vids[st], args.min_vids[en]), add_sort_freqs_idx[:add_num_localnode_feats]))
-            localnode_feats = global_node_feats[localnode_feats_idx]
+            localnode_feats = (
+                global_node_feats[localnode_feats_idx]
+                if global_node_feats is not None
+                else torch.rand((localnode_feats_idx.numel(), input_dim), dtype=torch.float32)
+            )
             args.cross_machine_feat_load = True
     else:
         localnode_feats_idx = torch.arange(total_nodes)
@@ -210,7 +215,7 @@ def pre_spawn():
 
     t0 = time.time()
     if args.debug:
-        dataset = AsNodePredDataset(DglNodePropPredDataset(args.dataset), save_dir="./dgl_dataset")
+        dataset = AsNodePredDataset(DglNodePropPredDataset(args.dataset, root="/efs/rjliu/dataset"))
         graph = dataset[0]
         graph = graph.remove_self_loop().add_self_loop()
         val_idx = dataset.val_idx
@@ -235,10 +240,11 @@ def pre_spawn():
     if args.debug:
         # load whole graph
         global_node_feats = graph.ndata["feat"]
-        global_labels = graph.ndata["label"]
+        global_labels = graph.ndata["label"].long().nan_to_num()
     else:
         # load pure graph without node features & labels
-        global_node_feats = torch.rand((total_nodes, input_dim), dtype=torch.float32)
+        # global_node_feats = torch.rand((total_nodes, input_dim), dtype=torch.float32)
+        global_node_feats = None
         global_labels = torch.randint(args.num_classes, (total_nodes,))
 
     clear_graph_data(graph)
@@ -298,7 +304,7 @@ def init_args(args=None) -> argparse.Namespace:
     parser.add_argument("--input_dim", type=int, default=100, help="input dimension")
     parser.add_argument("--num_classes", type=int, default=47, help="number of node classes")
     parser.add_argument("--num_hidden", type=int, default=16, help="size of hidden dimension")
-    parser.add_argument("--num_heads", type=int, default=8, help="number of attention heads, only for GAT")
+    parser.add_argument("--num_heads", type=int, default=4, help="number of attention heads, only for GAT")
     parser.add_argument("--world_size", type=int, default=4, help="number of workers")
     parser.add_argument("--warmup_epochs", type=int, default=3)
     parser.add_argument("--training_mode", type=str, default="training", choices=["training", "sampling"])
