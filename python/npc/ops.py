@@ -325,8 +325,11 @@ def load_partition(
             feat_dim_offset = args.cumsum_feat_dim[rank]
         else:
             # multi machine scenario
-            cached_feats = localnode_feats[cache_feat_node_pos].to(device)
-            feat_dim_offset = 0
+            localnode_st = args.node_rank * args.nproc_per_node
+            feat_dim_offset = args.cumsum_feat_dim[rank] - args.cumsum_feat_dim[localnode_st]
+            feat_dim_offset_en = args.cumsum_feat_dim[rank + 1] - args.cumsum_feat_dim[localnode_st]
+            cached_feats = localnode_feats[cache_feat_node_pos, feat_dim_offset:feat_dim_offset_en].to(device)
+
     else:
         cached_feats = localnode_feats[cache_feat_node_pos].to(device)
         feat_dim_offset = 0
