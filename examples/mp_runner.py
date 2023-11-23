@@ -28,11 +28,8 @@ def get_pre_defined_args(args):
                         # model specific
                         num_heads, num_hidden = (4, 8) if model == "GAT" else (-1, 16)
                         key = "npc" if sys == "NP" else "ori"
-
                         # dryrun path
                         dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"
-                        # single-machine case
-                        # tag = f"{tag_prefix}_{sys}_cm{cache_mem}GB"
                         yield {
                             "system": sys,
                             "model": model,
@@ -74,11 +71,14 @@ def get_user_input(tag_prefix):
 
 if __name__ == "__main__":
     args, shared_tensor_list, global_nfeat = utils.pre_spawn()
+
     world_size = args.world_size
     nproc = world_size if args.nproc_per_node == -1 else args.nproc_per_node
     ranks = args.ranks
     local_ranks = args.local_ranks
     print(f"[Note]procs:{nproc}\t world_size:{world_size}\t ranks:{ranks}\t local_ranks:{local_ranks}")
+    if args.nproc_per_node == -1:
+        shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(args, global_nfeat, shared_tensor_list)
 
     train_module = importlib.import_module("train")
     for inputs in get_pre_defined_args(args):
@@ -87,7 +87,8 @@ if __name__ == "__main__":
             setattr(args, key, value)
 
         utils.show_args(args)
-        shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(args, global_nfeat, shared_tensor_list)
+        if args.nproc_per_node != -1:
+            shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(args, global_nfeat, shared_tensor_list)
         # reimport train.py
         run = importlib.reload(train_module).run
         processes = []
@@ -99,3 +100,6 @@ if __name__ == "__main__":
 
         for p in processes:
             p.join()
+
+        if args.nproc_per_node != -1:
+            del shared_tensors_with_nfeat
