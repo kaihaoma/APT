@@ -1,0 +1,17 @@
+{
+    "name": "friendster",
+    "num_workers": 4,
+    "world_size": 4,
+    "input_dim": 256,
+    "num_classes": 3,
+    "min_vids": [
+        0,
+        16398012,
+        32799953,
+        49206913,
+        65608366
+    ],
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/friendster_w4_random/friendster_w4_random.bin",
+    "number_nodes": 65608366,
+    "number_edges": 3677742636
+}

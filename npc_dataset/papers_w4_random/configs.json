@@ -1,0 +1,17 @@
+{
+    "name": "papers",
+    "num_workers": 4,
+    "world_size": 4,
+    "input_dim": 128,
+    "num_classes": 172,
+    "min_vids": [
+        0,
+        27762423,
+        55530144,
+        83296143,
+        111059956
+    ],
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w4_random/papers_w4_random.bin",
+    "number_nodes": 111059956,
+    "number_edges": 1726745828
+}

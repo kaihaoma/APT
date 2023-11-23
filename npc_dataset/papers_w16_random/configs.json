@@ -1,0 +1,29 @@
+{
+    "name": "papers",
+    "num_workers": 16,
+    "world_size": 16,
+    "input_dim": 128,
+    "num_classes": 172,
+    "min_vids": [
+        0,
+        6939430,
+        13881143,
+        20824214,
+        27763361,
+        34705533,
+        41649568,
+        48588003,
+        55528877,
+        62468797,
+        69407868,
+        76350140,
+        83295342,
+        90241375,
+        97183858,
+        104122248,
+        111059956
+    ],
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w16_random/papers_w16_random.bin",
+    "number_nodes": 111059956,
+    "number_edges": 1726745828
+}
