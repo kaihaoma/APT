@@ -145,12 +145,16 @@ class MixedNeighborSampler(object):
         # Shape seeds = sum(send_offset)
         # Shape negibors = sum(send_offset) * self.las_fanouts
         # event.record()
-        seeds, neighbors, perm, send_offset, recv_offset = np_sample_and_shuffle(seeds, self.las_fanouts)
+        seeds, neighbors, perm, send_offset, recv_offset, inverse_idx = np_sample_and_shuffle(seeds, self.las_fanouts)
+
+        if self.debug_flag:
+            self.debug_check(neighbors, torch.repeat_interleave(seeds, self.las_fanouts))
+
         block = create_dgl_block(seeds, neighbors, self.las_fanouts)
         blocks.insert(0, block)
         seeds = block.srcdata[dgl.NID]
 
-        return seeds, output_nodes, blocks, perm, send_offset, recv_offset
+        return seeds, output_nodes, blocks, perm, send_offset, recv_offset, inverse_idx
 
 
 class MixedPSNeighborSampler(object):

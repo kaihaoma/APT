@@ -409,13 +409,14 @@ def _load_subtensor(
 
 def load_subtensor(args, sample_result):
     if args.system == "NP":
-        # [0]input_nodes, [1]seeds, [2]blocks, [3]perm, [4]send_offset, [5]recv_offset
+        # [0]input_nodes, [1]seeds, [2]blocks, [3]perm, [4]send_offset, [5]recv_offset, [6]inverse_idx
         fsi = NPFeatureShuffleInfo(
             feat_dim=args.num_hidden,
             num_dst=None,
             permutation=sample_result[3],
             send_offset=sample_result[4].to("cpu"),
             recv_offset=sample_result[5].to("cpu"),
+            inverse_idx=sample_result[6],
         )
         return (
             sample_result[2],
@@ -507,6 +508,7 @@ class NPFeatureShuffleInfo(object):
     send_offset: List[int]
     recv_offset: List[int]
     permutation: torch.Tensor
+    inverse_idx: torch.Tensor
 
 
 class NPFeatureShuffle(torch.autograd.Function):

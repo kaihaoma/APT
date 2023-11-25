@@ -64,6 +64,7 @@ class NPCSAGE(nn.Module):
             h = layer(block, h)
             if l == 0:
                 # event.record()
+                h = h[fsi.inverse_idx]
                 h = npc.NPFeatureShuffle.apply(fsi, h)
             if l != self.n_layers - 1:
                 h = self.activation(h)

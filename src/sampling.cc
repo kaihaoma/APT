@@ -38,13 +38,21 @@ torch::Tensor SrcDsttoVir(IdType fanout, torch::Tensor dst, torch::Tensor src) {
 
 std::vector<torch::Tensor> NPSampleAndShuffle(
     torch::Tensor seeds, IdType fanout) {
-  torch::Tensor shuffled_frontier, permutation, recv_offset, dev_offset;
+  torch::Tensor shuffled_frontier, permutation, recv_offset, dev_offset,
+      unique_shuffled_frontier, inverse_idx, counts;
   std::tie(shuffled_frontier, permutation, recv_offset, dev_offset) =
       ShuffleSeeds(seeds);
-  auto local_neighbors = LocalSampleNeighbors(shuffled_frontier, fanout);
+  std::tie(unique_shuffled_frontier, inverse_idx, counts) =
+      torch::_unique2(shuffled_frontier, true, true);
+  auto local_neighbors = LocalSampleNeighbors(unique_shuffled_frontier, fanout);
 
   return {
-      shuffled_frontier, local_neighbors, permutation, recv_offset, dev_offset};
+      unique_shuffled_frontier,
+      local_neighbors,
+      permutation,
+      recv_offset,
+      dev_offset,
+      inverse_idx};
 }
 
 std::vector<torch::Tensor> SPSampleAndShuffle(
