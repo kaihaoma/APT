@@ -180,7 +180,8 @@ def determine_feature_reside_cpu(args, global_node_feats, shared_tensor_list: Li
             min_req = args.min_vids[en] - args.min_vids[st]
             max_req = total_nodes
 
-            num_localnode_feats = int(args.num_localnode_feats_in_workers * total_nodes / args.world_size)
+            # num_localnode_feats = int(args.num_localnode_feats_in_workers * total_nodes / args.world_size)
+            num_localnode_feats = int(args.num_localnode_feats_in_workers * 1024 * 1024 * 1024 / (4 * input_dim))
 
             args.num_localnode_feats = max(min(num_localnode_feats, max_req), min_req)
             print(
@@ -309,7 +310,7 @@ def init_args(args=None) -> argparse.Namespace:
     parser.add_argument("--batch_size", type=int, default=1024, help="local batch size")
     parser.add_argument("--num_epochs", type=int, default=10, help="number of epochs")
     parser.add_argument("--fan_out", type=str, default="10,10,10", help="Fanout, in reverse order from k-hop to 1-hop")
-    parser.add_argument("--dropout", default=0.5)
+    parser.add_argument("--dropout", default=0.0)
     parser.add_argument("--num_nodes", type=int, default=-1, help="number of total nodes")
     parser.add_argument("--input_dim", type=int, default=100, help="input dimension")
     parser.add_argument("--num_classes", type=int, default=47, help="number of node classes")
@@ -327,7 +328,7 @@ def init_args(args=None) -> argparse.Namespace:
     parser.add_argument("--node_rank", default=-1, type=int, help="Distributed node rank")
 
     parser.add_argument(
-        "--num_localnode_feats_in_workers", default=-1, type=int, help="number of node feats in local nodes, -1 means feats of all nodes"
+        "--num_localnode_feats_in_workers", default=-1, type=float, help="number of node feats in local nodes, -1 means feats of all nodes"
     )
     # from config
     parser.add_argument("--configs_path", default="None", type=str, help="the path to the graph configs.json")

@@ -253,7 +253,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 output_device=device,
             )
     print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
-    optimizer = torch.optim.Adam(training_model.parameters(), lr=0.01, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(training_model.parameters(), lr=0.001, weight_decay=5e-4)
     dist.barrier()
     print(f"[Note]Rank#{rank} Ready to train\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
 
@@ -275,11 +275,34 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         args.num_epochs = 1
         """
 
+        # evaluate
+        if args.debug:
+            acc = (
+                utils.evaluate(
+                    args,
+                    training_model,
+                    labels,
+                    args.num_classes,
+                    val_dataloader,
+                ).to(device)
+                / world_size
+            )
+            dist.reduce(acc, 0)
+            if rank == 0:
+                acc_str = "Epoch {:05d} | Loss {:.4f} | Accuracy {:.4f}\n".format(
+                    -1,
+                    0,
+                    acc.item(),
+                )
+                print(f"[Note]{acc_str}")
+                acc_file.write(acc_str)
+
         record_list = []
         for epoch in range(args.num_epochs):
             epoch_tic_start = utils.get_time()
             # t2 = utils.get_time()
             bt2, t2 = utils.get_time_straggler()
+            training_model.train()
             total_loss = 0
             # nvtx.range_push("Sampling")
             for step, sample_result in enumerate(dataloader):
@@ -353,9 +376,6 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                         # t2 - bt2,
                     ]
                     record_list.append(record_val)
-
-                if step >= LIMIT_BATCHES:
-                    break
 
                 t2 = utils.get_time()
 
