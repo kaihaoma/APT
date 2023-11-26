@@ -134,11 +134,9 @@ class MixedNeighborSampler(object):
         # event = MyEvent()
         for fanout in reversed(self.fir_fanouts):
             seeds, neighbors = local_sample_one_layer(seeds, fanout)
-            replicated_seeds = torch.repeat_interleave(seeds, fanout)
             if self.debug_flag:
-                self.debug_check(neighbors, replicated_seeds)
-            block_g = dgl.graph((neighbors, replicated_seeds))
-            block = dgl.to_block(g=block_g, dst_nodes=seeds)
+                self.debug_check(neighbors, torch.repeat_interleave(seeds, fanout))
+            block = create_dgl_block(seeds, neighbors, fanout)
             seeds = block.srcdata[dgl.NID]
             blocks.insert(0, block)
         # last layer

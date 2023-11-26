@@ -92,6 +92,7 @@ class NPCGAT(nn.Module):
                 h = h.flatten(1)
             if l == 0:
                 fsi.feat_dim = self.n_hidden * self.heads[0] if l != self.n_layers - 1 else self.n_hidden
+                h = h[fsi.inverse_idx]
                 h = npc.NPFeatureShuffle.apply(fsi, h)
         return h  # event
 
