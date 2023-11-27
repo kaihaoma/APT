@@ -228,7 +228,7 @@ def load_graph(args):
         val_idx = dataset.val_idx
         return (graph, val_idx)
     """
-    graph_path = args.graph_path if args.debug else args.graph_path_all
+    graph_path = args.graph_path_all if args.debug else args.graph_path
     print(f"[Note]Load graph from {graph_path}")
     dataset_tuple = dgl.load_graphs(graph_path)
     graph = dataset_tuple[0][0]
@@ -268,7 +268,6 @@ def pre_spawn():
 
     clear_graph_data(graph)
     indptr, indices, edges_ids = graph.adj_tensors("csc")
-    del edges_ids, graph
 
     shared_tensor_list = [global_labels, global_train_mask, indptr, indices]
     # append val_idx for validation
@@ -277,6 +276,8 @@ def pre_spawn():
         global_val_mask = graph.ndata[find_key_in_graph(graph, "val_mask")].bool()
         val_idx = torch.masked_select(torch.arange(graph.num_nodes()), global_val_mask)
         shared_tensor_list.append(val_idx)
+
+    del edges_ids, graph
 
     for tensor in shared_tensor_list:
         tensor.share_memory_()
