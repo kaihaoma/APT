@@ -218,40 +218,48 @@ def determine_feature_reside_cpu(args, global_node_feats, shared_tensor_list: Li
     return [localnode_feats_idx, localnode_feats] + shared_tensor_list
 
 
+def load_graph(args):
+    """
+    if args.debug:
+        print(f"[Note]Debug mode, load {args.dataset} by DGL api ")
+        dataset = AsNodePredDataset(DglNodePropPredDataset(args.dataset, root="./dgl_dataset"))
+        graph = dataset[0]
+        graph = graph.remove_self_loop().add_self_loop()
+        val_idx = dataset.val_idx
+        return (graph, val_idx)
+    """
+    graph_path = args.graph_path if args.debug else args.graph_path_all
+    print(f"[Note]Load graph from {graph_path}")
+    dataset_tuple = dgl.load_graphs(graph_path)
+    graph = dataset_tuple[0][0]
+    return graph
+
+
 # output: args, shared_tensor_list
 def pre_spawn():
     args = init_args()
 
     mp.set_start_method("spawn", force=True)
 
-    t0 = time.time()
-    if args.debug:
-        dataset = AsNodePredDataset(DglNodePropPredDataset(args.dataset, root="/efs/rjliu/dataset"))
-        graph = dataset[0]
-        graph = graph.remove_self_loop().add_self_loop()
-        val_idx = dataset.val_idx
-    else:
-        dataset_tuple = dgl.load_graphs(args.graph_path)
-        graph = dataset_tuple[0][0]
+    graph = load_graph(args)
 
-    loading_dataset_time = round(time.time() - t0, 2)
-    print(f"[Note]Load data from {args.graph_path}, Time:{loading_dataset_time} seconds\n result:{graph}\n")
     print(f"[Note]After load whole graph, {get_total_mem_usage_in_gb()}")
 
-    def find_train_mask(graph):
-        for k in list(graph.ndata.keys()):
-            if "train_mask" in k:
-                return k
+    def find_key_in_graph(graph, key):
+        for graph_key in list(graph.ndata.keys()):
+            if key in graph_key:
+                return graph_key
         return None
 
-    global_train_mask = graph.ndata[find_train_mask(graph)].bool()
-    input_dim = args.input_dim
+    global_train_mask = graph.ndata[find_key_in_graph(graph, "train_mask")].bool()
+
     total_nodes = graph.num_nodes()
     args.num_nodes = total_nodes
     if args.debug:
         # load whole graph
-        global_node_feats = graph.ndata["feat"]
-        global_labels = graph.ndata["label"].long().nan_to_num()
+        # global_node_feats = graph.ndata["feat"]
+        global_node_feats = graph.ndata[find_key_in_graph(graph, "feat")]
+        global_labels = graph.ndata[find_key_in_graph(graph, "label")].long().nan_to_num()
     else:
         # load pure graph without node features & labels
         # global_node_feats = torch.rand((total_nodes, input_dim), dtype=torch.float32)
@@ -266,6 +274,8 @@ def pre_spawn():
     # append val_idx for validation
     if args.debug:
         shared_tensor_list.append(global_node_feats.clone())
+        global_val_mask = graph.ndata[find_key_in_graph(graph, "val_mask")].bool()
+        val_idx = torch.masked_select(torch.arange(graph.num_nodes()), global_val_mask)
         shared_tensor_list.append(val_idx)
 
     for tensor in shared_tensor_list:
@@ -352,7 +362,7 @@ def init_args(args=None) -> argparse.Namespace:
             print(f"[Note]Set args {key} = {value}")
             setattr(args, key, value)
     else:
-        raise f"[Note] configs:{args.configs_path} not exists!"
+        raise ValueError(f"[Error]configs: {args.configs_path} not exists")
 
     if not isinstance(args.min_vids, list):
         args.min_vids = list(map(int, args.min_vids.split(",")))
@@ -366,14 +376,6 @@ def init_args(args=None) -> argparse.Namespace:
     # define dryrun file path
     args.dryrun_file_path = ""
 
-    """
-    fanout_info = str(args.fan_out).replace(" ", "")
-    if args.cache_mode in ["greedy", "costmodel"] and args.sorted_idx_path == "" and args.cache_memory > 0:
-        args.sorted_idx_path = f"{args.sampling_path}_{fanout_info}/uva16"
-        # print(f"[Note]args.sorted_idx_path:{args.sorted_idx_path}")
-        assert args.cache_memory <= 0 or args.sorted_idx_path != ""
-    """
-
     # For convenience, we use the same args for all systems
     # input dim for each process
     input_dim = args.input_dim
@@ -385,7 +387,6 @@ def init_args(args=None) -> argparse.Namespace:
 
     args.mp_input_dim_list = mp_input_dim_list
     args.cumsum_feat_dim = list(accumulate([0] + mp_input_dim_list))
-    # print(f"[Note]mp_input_dim_list:{mp_input_dim_list}\t mp_input_dim_list:{args.cumsum_feat_dim}")
 
     # set ranks
     if args.nproc_per_node != -1:

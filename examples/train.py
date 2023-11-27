@@ -22,7 +22,6 @@ from torch.profiler import record_function, tensorboard_trace_handler
 
 TEST_EPOCHS = 1
 TEST_BATCHES = 15
-LIMIT_BATCHES = 200
 
 
 def run(rank, local_rank, world_size, args, shared_tensor_list):
@@ -297,17 +296,21 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 print(f"[Note]{acc_str}")
                 acc_file.write(acc_str)
 
+        record_flag = args.nproc_per_node != -1
         record_list = []
         for epoch in range(args.num_epochs):
-            epoch_tic_start = utils.get_time()
-            # t2 = utils.get_time()
-            bt2, t2 = utils.get_time_straggler()
             training_model.train()
+            # epoch_tic_start = utils.get_time()
+            t2 = utils.get_time()
+            # bt2, t2 = utils.get_time_straggler()
             total_loss = 0
+            total_sampling_time = 0
+            total_loading_time = 0
+            total_training_time = 0
             # nvtx.range_push("Sampling")
             for step, sample_result in enumerate(dataloader):
-                # t0 = utils.get_time()
-                bt0, t0 = utils.get_time_straggler()
+                t0 = utils.get_time()
+                # bt0, t0 = utils.get_time_straggler()
                 # nvtx.range_pop()
                 # nvtx.range_push("Loading")
 
@@ -329,8 +332,8 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     debug_loading_flag = torch.all(torch.eq(loading_result[1].detach().cpu(), debug_loading_result))
                     assert debug_loading_flag
 
-                # t1 = utils.get_time()
-                bt1, t1 = utils.get_time_straggler()
+                t1 = utils.get_time()
+                # bt1, t1 = utils.get_time_straggler()
                 # nvtx.range_pop()
                 # nvtx.range_push("Training")
 
@@ -354,8 +357,8 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                         f"[Note]Rank#{rank} epoch#{epoch},batch#{step} Loss: {loss:.3f}\t acc:{accuracy:.3f}")
                 """
                 ms_sampling_time = 1000.0 * (t0 - t2)
-                # t2 = utils.get_time()
-                bt2, t2 = utils.get_time_straggler()
+                t2 = utils.get_time()
+                # bt2, t2 = utils.get_time_straggler()
                 # prof.step()
                 # nvtx.range_pop()
                 # nvtx.range_push("Sampling")
@@ -366,22 +369,28 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     total_time[0] += ms_sampling_time
                     total_time[1] += ms_loading_time
                     total_time[2] += ms_training_time
-
-                    record_val = [
-                        ms_sampling_time,
-                        # t0 - bt0,
-                        ms_loading_time,
-                        # t1 - bt1,
-                        ms_training_time,
-                        # t2 - bt2,
-                    ]
-                    record_list.append(record_val)
+                    total_sampling_time += ms_sampling_time
+                    total_loading_time += ms_loading_time
+                    total_training_time += ms_training_time
+                    if record_flag:
+                        record_val = [
+                            ms_sampling_time,
+                            # t0 - bt0,
+                            ms_loading_time,
+                            # t1 - bt1,
+                            ms_training_time,
+                            # t2 - bt2,
+                        ]
+                        record_list.append(record_val)
 
                 t2 = utils.get_time()
 
-            epoch_tic_end = utils.get_time()
-            if not args.debug:
-                print(f"Rank: {rank} | Epoch: {epoch} | Epoch time: {epoch_tic_end - epoch_tic_start:.3f} s")
+            # epoch_tic_end = utils.get_time()
+            if not args.debug and args.rank == 0:
+                epoch_time = total_sampling_time + total_loading_time + total_training_time
+                print(
+                    f"Rank: {rank} | Epoch: {epoch} | Sampling time: {total_sampling_time:3f}| Loading time: {total_loading_time:3f}| Training time: {total_training_time:3f}| Epoch time: {epoch_time:.3f} s"
+                )
 
             # evaluate
             if args.debug:
@@ -414,25 +423,26 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
             avg_time_epoch_training = round(total_time[2] / num_record_epochs, 4)
 
             # write record to csv file
-
-            record_path = f"./logs/record/{args.tag}.csv"
-            with open(record_path, "a") as f:
-                writer = csv.writer(f, lineterminator="\n")
-                writer.writerows(record_list)
+            if record_flag:
+                record_path = f"./logs/record/{args.tag}.csv"
+                with open(record_path, "a") as f:
+                    writer = csv.writer(f, lineterminator="\n")
+                    writer.writerows(record_list)
 
             # cross-machine feature loading variance check
-            check_flag = True
-            fail_idx = []
-            for cid in range(3):
-                vals = [e[cid] for e in record_list]
-                variance = max(vals) / min(vals)
-                print(f"[Note]Checking Index{cid} variance:{variance}")
-                if variance > 2:
-                    check_flag = False
-                    fail_idx.append(cid)
+            if record_flag:
+                check_flag = True
+                fail_idx = []
+                for cid in range(3):
+                    vals = [e[cid] for e in record_list]
+                    variance = max(vals) / min(vals)
+                    print(f"[Note]Checking Index{cid} variance:{variance}")
+                    if variance > 2:
+                        check_flag = False
+                        fail_idx.append(cid)
 
-            if not check_flag:
-                args.tag = f"variance{fail_idx}_{args.tag}"
+                if not check_flag:
+                    args.tag = f"variance{fail_idx}_{args.tag}"
 
             with open(args.logs_dir, "a") as f:
                 writer = csv.writer(f, lineterminator="\n")
@@ -440,7 +450,8 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 cache_memory = f"{round(args.cache_memory / (1024*1024*1024), 1)}GB"
                 cache_value = args.greedy_feat_ratio if args.cache_mode == "greedy" else args.tag.split("_")[-1]
                 avg_epoch_time = round(avg_time_epoch_sampling + avg_time_epoch_loading + avg_time_epoch_training, 2)
-                dataset_name = args.name.split("_")[0]
+
+                dataset_name = args.configs_path.split("/")[-2]
                 write_tag = f"{dataset_name}_{args.tag}"
 
                 log_info = [
