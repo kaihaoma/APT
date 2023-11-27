@@ -266,7 +266,6 @@ def pre_spawn():
         global_node_feats = None
         global_labels = torch.randint(args.num_classes, (total_nodes,))
 
-    clear_graph_data(graph)
     indptr, indices, edges_ids = graph.adj_tensors("csc")
 
     shared_tensor_list = [global_labels, global_train_mask, indptr, indices]
