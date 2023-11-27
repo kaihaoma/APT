@@ -46,15 +46,15 @@ def plt_save_and_final(save_path):
 
 
 def read_csv(input_path=None, has_header=True):
-    #print(f"[Note]read_csv from {input_path}")
+    # print(f"[Note]read_csv from {input_path}")
     with open(input_path, "r") as file:
         reader = csv.reader(file)
         if has_header:
             headers = next(reader)
         else:
             headers = None
-        #print(f"[Note]headers:{headers}")
-        elements = [row for row in reader]
+        # print(f"[Note]headers:{headers}")
+        elements = [row for row in reader if len(row) > 0]
 
     return headers, elements
 
@@ -186,10 +186,7 @@ def plt_bar(
     pre_offsets = [0] + list(itertools.accumulate(offsets))
     print(f"pre_offsets:{pre_offsets}")
     for i in range(num_series):
-        plot_x = [
-            pre_offsets[j] + 3 * j + plot_x_list[i][j]
-            for j in range(len(plot_x_list[i]))
-        ]
+        plot_x = [pre_offsets[j] + 3 * j + plot_x_list[i][j] for j in range(len(plot_x_list[i]))]
         plot_y = plot_y_list[i]
         plot_label = plot_label_list[i]
         print(f"[Note]x:{plot_x}\t y:{plot_y}\t label:{plot_label}")
@@ -210,10 +207,7 @@ def plt_bar(
     if yticks is not None:
         ax.set_yticks(yticks, yticks, fontsize=font_size)
 
-    plot_xticks = [
-        (num_series + 3) * j + 0.5 * (num_series - 1)
-        for j in range(num_elements_per_series)
-    ]
+    plot_xticks = [(num_series + 3) * j + 0.5 * (num_series - 1) for j in range(num_elements_per_series)]
 
     ax.set_xticks(plot_xticks, xlabels, fontsize=font_size)
     ax.legend(fontsize=font_size, edgecolor="k", ncols=2)
@@ -223,9 +217,7 @@ def plt_bar(
 
 
 def isfloat(val):
-    return all(
-        [[any([i.isnumeric(), i in [".", "e"]]) for i in val], len(val.split(".")) == 2]
-    )
+    return all([[any([i.isnumeric(), i in [".", "e"]]) for i in val], len(val.split(".")) == 2])
 
 
 def draw_figure(input_path="./data/data1.csv", tag="fig1", header_offset=1):
@@ -368,9 +360,7 @@ def draw_figure_group_stacked_bar(
     ax = plt.gca()
     num_series = len(labels)
     num_elements_per_series = len(elements[0][0])
-    print(
-        f"[Note]num_series:{num_series}\t num_elements_per_series:{num_elements_per_series}"
-    )
+    print(f"[Note]num_series:{num_series}\t num_elements_per_series:{num_elements_per_series}")
     offset = num_series + 1
     # plot
     stage_labels = ["Sampling", "Loading", "Training"]
