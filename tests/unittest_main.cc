@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
   }
   MPI_Barrier(MPI_COMM_WORLD);
   auto nccl_id_list_tensor = torch::vstack(nccl_id_list);
-  npc::Initialize(rank, rank, world_size, nccl_id_list_tensor);
+  npc::Initialize(rank, rank, world_size, nccl_id_list_tensor, world_size);
 
   int result = RUN_ALL_TESTS();
 

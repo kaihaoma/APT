@@ -13,7 +13,7 @@ torch::Tensor NCCLGetUniqueId();
 
 void Initialize(
     IdType rank, IdType local_rank, IdType world_size,
-    torch::Tensor nccl_id_tensor_list);
+    torch::Tensor nccl_id_tensor_list, IdType node_size);
 
 void RegisterMinVids(torch::Tensor shuffle_min_vids, IdType shuffle_id_offset);
 

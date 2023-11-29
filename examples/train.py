@@ -44,6 +44,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         rank=rank,
         local_rank=local_rank,
         world_size=world_size,
+        node_size=world_size if args.nproc_per_node == -1 else args.nproc_per_node,
         num_nccl_comms=1,
         device=device,
         init_mp=True,
@@ -296,7 +297,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 print(f"[Note]{acc_str}")
                 acc_file.write(acc_str)
 
-        record_flag = args.nproc_per_node != -1
+        record_flag = True
         record_list = []
         for epoch in range(args.num_epochs):
             training_model.train()

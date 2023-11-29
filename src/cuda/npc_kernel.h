@@ -26,7 +26,7 @@ torch::Tensor LocalSampleNeighbors(torch::Tensor frontier, int fanout);
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 ClusterAndPermute(
     int world_size, torch::Tensor seeds, IdType shuffle_id_offset,
-    torch::Tensor shuffle_min_vids);
+    torch::Tensor shuffle_min_vids, int rank, int node_beg, int node_end);
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
 MultiMachinesClusterAndPermute(torch::Tensor seeds);
@@ -34,14 +34,14 @@ MultiMachinesClusterAndPermute(torch::Tensor seeds);
 // map dst&src to vir
 torch::Tensor MapSrcDsttoVir(
     IdType world_size, IdType fanout, torch::Tensor dst, torch::Tensor src,
-    IdType shuffle_id_offset, torch::Tensor shuffle_min_vids);
+    IdType shuffle_id_offset, torch::Tensor shuffle_min_vids, int rank, int node_beg, int node_end);
 
     
 
 // map src to vir
 torch::Tensor MapSrctoVir(
     IdType world_size, IdType fanout, IdType num_dst, torch::Tensor src,
-    IdType shuffle_id_offset, torch::Tensor shuffle_min_vids);
+    IdType shuffle_id_offset, torch::Tensor shuffle_min_vids, int rank, int node_beg, int node_end);
 
 // lower_bound i*base for torch.cat((sorted_nodes, unique_nodes)
 torch::Tensor GetVirSendOffset(
