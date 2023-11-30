@@ -10,26 +10,33 @@ def get_pre_defined_args(args):
     config_key = args.configs_path.split("/")[-2]
     num_try_times = 1
     # cache_memory_in_gbs = [1]
-    cache_memory_in_gbs = list(range(8))
-    system = ["DP", "NP", "SP", "MP"]
-    models = ["SAGE", "GCN", "GAT"]
+    cache_memory_in_gbs = [4]
+    system = ["NP", "SP"]
+    models = ["SAGE"]
 
     # num_localnode_feats_in_workers = list(range(4, 8))
-    num_localnode_feats_in_workers = [-1]
+    if args.name == "papers":
+        num_localnode_feats_in_workers = [13.25, 14.25, 15.25, 16.25, 17.25]
+    elif args.name == "friendster":
+        num_localnode_feats_in_workers = [15.65, 17.65, 19.65, 21.65, 23.65, 25.65, 27.65, 29.65, 31.65, 33.65]
+    elif args.name == "igbfull":
+        # num_localnode_feats_in_workers = [32.11, 33.11, 34.11, 35.11, 36.11]
+        num_localnode_feats_in_workers = [50, 80, 100, 120, 150]
+    else:
+        raise NotImplementedError
     # generate args
-    for try_times in range(num_try_times):
+    for try_times in range(0, 0 + num_try_times):
         for cache_mem in cache_memory_in_gbs:
             for nl in num_localnode_feats_in_workers:
                 for sys in system:
                     for model in models:
                         cm = cache_mem * 1024 * 1024 * 1024
                         # cross-machine feat loading case
-                        tag = f"t{try_times}_{sys}_{model}_nl{nl}of8_cm{cache_mem}GB"
+                        tag = f"t{try_times}_DP+{sys}_{model}_nl{nl}of{args.world_size}_cm{cache_mem}GB"
                         # model specific
                         num_heads, num_hidden = (4, 8) if model == "GAT" else (-1, 16)
-                        key = "npc" if sys == "NP" else "ori"
                         # dryrun path
-                        dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"
+                        dryrun_file_path = f"{args.caching_candidate_path_prefix}/hybrid_{sys}_{config_key}_{fanout_info}"
                         yield {
                             "system": sys,
                             "model": model,
@@ -79,6 +86,8 @@ if __name__ == "__main__":
     print(f"[Note]procs:{nproc}\t world_size:{world_size}\t ranks:{ranks}\t local_ranks:{local_ranks}")
     if args.nproc_per_node == -1:
         shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(args, global_nfeat, shared_tensor_list)
+
+    args.caching_candidate_path_prefix = "/efs/rjliu/Auto-parallel/sampling_all/ap_simulation"
 
     train_module = importlib.import_module("train")
     for inputs in get_pre_defined_args(args):
