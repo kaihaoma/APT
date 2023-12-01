@@ -10,18 +10,21 @@ def get_pre_defined_args(args):
     config_key = args.configs_path.split("/")[-2]
     num_try_times = 1
     # cache_memory_in_gbs = [1]
-    cache_memory_in_gbs = [4]
+    cache_memory_in_gbs = [0]
     system = ["NP", "SP"]
     models = ["SAGE"]
 
     # num_localnode_feats_in_workers = list(range(4, 8))
     if args.name == "papers":
-        num_localnode_feats_in_workers = [13.25, 14.25, 15.25, 16.25, 17.25]
+        num_localnode_feats_in_workers = [150]
+        # num_localnode_feats_in_workers = [13.25, 14.25, 15.25, 16.25, 17.25]
     elif args.name == "friendster":
-        num_localnode_feats_in_workers = [15.65, 17.65, 19.65, 21.65, 23.65, 25.65, 27.65, 29.65, 31.65, 33.65]
+        num_localnode_feats_in_workers = [150]
+        # num_localnode_feats_in_workers = [15.65, 17.65, 19.65, 21.65, 23.65, 25.65, 27.65, 29.65, 31.65, 33.65]
     elif args.name == "igbfull":
+        num_localnode_feats_in_workers = [150]
         # num_localnode_feats_in_workers = [32.11, 33.11, 34.11, 35.11, 36.11]
-        num_localnode_feats_in_workers = [50, 80, 100, 120, 150]
+        # num_localnode_feats_in_workers = [50, 80, 100, 120, 150]
     else:
         raise NotImplementedError
     # generate args
@@ -46,6 +49,7 @@ def get_pre_defined_args(args):
                             "num_heads": num_heads,
                             "num_hidden": num_hidden,
                             "dryrun_file_path": dryrun_file_path,
+                            "gpu_cache_worker": "single",
                         }
 
 

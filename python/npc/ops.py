@@ -171,9 +171,19 @@ def cache_adj_and_feats(
         print(f"[Note]load dryrun for sys {args.system} from {args.dryrun_file_path}")
 
         # load dryrun result
-        caching_candidate_path = f"{args.dryrun_file_path}/rk#{rank}_epo10.pt"
-        node_feats_freqs = torch.load(caching_candidate_path)[1]
-        sorted_idx = torch.sort(node_feats_freqs, descending=True)[1]
+        if args.gpu_cache_worker == "single":
+            caching_candidate_path = f"{args.dryrun_file_path}/rk#{rank}_epo10.pt"
+            node_feats_freqs = torch.load(caching_candidate_path)[1]
+            sorted_idx = torch.sort(node_feats_freqs, descending=True)[1]
+        else:
+            if rank == 0:
+                ori_freq_lists = [torch.load(f"{args.dryrun_file_path}/rk#{r}_epo10.pt")[1] for r in range(args.world_size)]
+                sum_freq_lists = torch.stack(ori_freq_lists, dim=0).sum(dim=0).to(args.device)
+                sorted_idx = torch.sort(sum_freq_lists, descending=True)[1]
+            else:
+                sorted_idx = torch.empty(num_total_nodes, dtype=torch.long, device=args.device)
+            dist.broadcast(sorted_idx, 0)
+            sorted_idx = sorted_idx.cpu()
 
         # if args.system in ["NP"]:
         #     caching_candidate_path = f"{args.dryrun_file_path}/rk#{rank}_epo100.pt"
