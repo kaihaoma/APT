@@ -53,11 +53,12 @@ ncclComm_t BuildNCCLComm(
 
 void Initialize(
     IdType rank, IdType local_rank, IdType world_size,
-    torch::Tensor nccl_id_tensor_list) {
+    torch::Tensor nccl_id_tensor_list, IdType node_size) {
   auto* state = NPCState::Global();
   state->rank = rank;
   state->local_rank = local_rank;
   state->world_size = world_size;
+  state->node_size = node_size;
   auto nccl_id_sizes = nccl_id_tensor_list.sizes();
   state->num_threads = nccl_id_sizes[0];
   state->nccl_comm_list.resize(state->num_threads);

@@ -19,20 +19,33 @@ std::vector<torch::Tensor> LocalSamplingNeibhorsOneLayer(
 torch::Tensor SrcToVir(IdType fanout, IdType num_dst, torch::Tensor src) {
   auto* state = NPCState::Global();
   auto world_size = state->world_size;
+  int rank = state->rank;
+  int node_size = state->node_size;
   auto shuffle_id_offset = state->shuffle_id_offset;
   auto shuffle_min_vids = state->shuffle_min_vids;
+
+  int node_beg = rank - (rank % node_size);
+  int node_end = node_beg + node_size;
+
   auto map_src = MapSrctoVir(
-      world_size, fanout, num_dst, src, shuffle_id_offset, shuffle_min_vids);
+      world_size, fanout, num_dst, src, shuffle_id_offset, shuffle_min_vids,
+      rank, node_beg, node_end);
   return map_src;
 }
 
 torch::Tensor SrcDsttoVir(IdType fanout, torch::Tensor dst, torch::Tensor src) {
   auto* state = NPCState::Global();
   auto world_size = state->world_size;
+  int rank = state->rank;
+  int node_size = state->node_size;
   auto shuffle_id_offset = state->shuffle_id_offset;
   auto shuffle_min_vids = state->shuffle_min_vids;
+
+  int node_beg = rank - (rank % node_size);
+  int node_end = node_beg + node_size;
+
   auto map_allnodes = MapSrcDsttoVir(
-      world_size, fanout, dst, src, shuffle_id_offset, shuffle_min_vids);
+      world_size, fanout, dst, src, shuffle_id_offset, shuffle_min_vids, rank, node_beg, node_end);
   return map_allnodes;
 }
 
@@ -148,13 +161,18 @@ ShuffleSeeds(torch::Tensor seeds) {
   auto* state = NPCState::Global();
   int rank = state->rank;
   int world_size = state->world_size;
+  int node_size = state->node_size;
   auto cuda_tensor_option = seeds.options();
   auto shuffle_id_offset = state->shuffle_id_offset;
   auto shuffle_min_vids = state->shuffle_min_vids;
 
+  int node_beg = rank - (rank % node_size);
+  int node_end = node_beg + node_size;
+
   torch::Tensor dev_size, dev_offset, sorted_idx, permutation;
-  std::tie(dev_size, dev_offset, sorted_idx, permutation) =
-      ClusterAndPermute(world_size, seeds, shuffle_id_offset, shuffle_min_vids);
+  std::tie(dev_size, dev_offset, sorted_idx, permutation) = ClusterAndPermute(
+      world_size, seeds, shuffle_id_offset, shuffle_min_vids, rank, node_beg,
+      node_end);
 
   // All-to-all send sizes
   auto arange = torch::arange(1, world_size + 1);

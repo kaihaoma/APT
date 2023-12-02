@@ -31,7 +31,7 @@ struct Profiler {
 
 struct NPCState {
   // nccl communication
-  int rank, local_rank, world_size;
+  int rank, local_rank, world_size, node_size;
   ncclComm_t nccl_comm;
   std::vector<ncclComm_t> nccl_comm_list;
   int sampler_id, trainer_id, num_threads;

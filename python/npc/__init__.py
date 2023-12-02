@@ -28,7 +28,7 @@ def _init(rank, local_rank, world_size, shared_queue):
     torch.ops.npc.init(rank, local_rank, world_size, nccl_unique_id)
 
 
-def _init_broadcast(rank, local_rank, world_size, device, num_nccl_comms):
+def _init_broadcast(rank, local_rank, world_size, node_size, device, num_nccl_comms):
     print(f"[Note]No#[{rank}\t {local_rank}\t {world_size}] device:{device}")
     nccl_unique_id_list = []
     for i in range(num_nccl_comms):
@@ -43,11 +43,12 @@ def _init_broadcast(rank, local_rank, world_size, device, num_nccl_comms):
         local_rank,
         world_size,
         nccl_unique_id_list,
+        node_size,
     )
 
 
-def init(rank, local_rank, world_size, num_nccl_comms=2, device=None, init_mp=True):
+def init(rank, local_rank, world_size, node_size, num_nccl_comms=2, device=None, init_mp=True):
     _load_npc_library()
     if init_mp:
         # _init(rank, world_size, shared_queue)
-        _init_broadcast(rank, local_rank, world_size, device, num_nccl_comms)
+        _init_broadcast(rank, local_rank, world_size, node_size, device, num_nccl_comms)

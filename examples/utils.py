@@ -194,7 +194,11 @@ def determine_feature_reside_cpu(args, global_node_feats, shared_tensor_list: Li
             else:
                 # For load dryrun result
                 print(f"[Note]load dryrun for sys {args.system} from {args.dryrun_file_path}")
-                local_freq_lists = [torch.load(f"{args.dryrun_file_path}/rk#{r}_epo100.pt")[1] for r in range(st, en)]
+                if args.nproc_per_node != -1 and args.hybrid:
+                    # hybrid parallelism
+                    local_freq_lists = [torch.load(f"{args.dryrun_file_path}/rk#{r}_epo10.pt")[1] for r in range(st, en)]
+                else:
+                    local_freq_lists = [torch.load(f"{args.dryrun_file_path}/rk#{r}_epo100.pt")[1] for r in range(st, en)]
                 sum_freqs = torch.stack(local_freq_lists, dim=0).sum(dim=0)
                 sort_freqs_idx = torch.sort(sum_freqs, descending=True)[1]
                 add_sort_freqs_idx = sort_freqs_idx[torch.logical_or(sort_freqs_idx < args.min_vids[st], sort_freqs_idx >= args.min_vids[en])]
@@ -349,6 +353,7 @@ def init_args(args=None) -> argparse.Namespace:
     parser.add_argument(
         "--idx_mem_path", type=str, default="./sampling_all/npc/sorted_idx_mem.pt", help="path of pre-processed mem usage of sorted idx"
     )
+    parser.add_argument("--hybrid", type=bool, default=False)
     # For debug
     parser.add_argument("--debug", action="store_true", help="debug mode")
 

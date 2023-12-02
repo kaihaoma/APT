@@ -40,15 +40,11 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         backend=backend,
     )
 
-    node_size = world_size
-    if args.nproc_per_node != -1 and args.hybrid:
-        node_size = args.nproc_per_node
-
     npc.init(
         rank=rank,
         local_rank=local_rank,
         world_size=world_size,
-        node_size=node_size,
+        node_size=world_size if args.nproc_per_node == -1 else args.nproc_per_node,
         num_nccl_comms=1,
         device=device,
         init_mp=True,
@@ -90,7 +86,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         num_total_val = val_idx.numel()
         num_val_per_rank = int(num_total_val // args.world_size)
         rank_val_idx = val_idx[rank * num_val_per_rank : (rank + 1) * num_val_per_rank]
-        acc_file_path = f"./logs/accuracy/{args.model}_{args.system}_{args.dataset}_{world_size}.txt"
+        acc_file_path = f"./logs/accuracy/Test2_Nov20_{args.model}_{args.system}_{args.dataset}_{world_size}.txt"
         if rank == 0:
             acc_file = open(acc_file_path, "w")
 
@@ -303,6 +299,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
         record_flag = True
         record_list = []
+        counter_list = [torch.zeros(args.num_nodes, dtype=torch.long) for _ in range(2)]
         for epoch in range(args.num_epochs):
             training_model.train()
             # epoch_tic_start = utils.get_time()
@@ -318,6 +315,10 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 # bt0, t0 = utils.get_time_straggler()
                 # nvtx.range_pop()
                 # nvtx.range_push("Loading")
+
+                counter_list[0][sample_result[1].cpu()] += 1
+                counter_list[1][sample_result[0].cpu()] += 1
+                continue
 
                 batch_labels = labels[sample_result[1]]
                 loading_result = npc.load_subtensor(args, sample_result)
@@ -418,6 +419,15 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     )
                     print(f"[Note]{acc_str}")
                     acc_file.write(acc_str)
+
+        dryrun_savedir = "/efs/rjliu/Auto-parallel/sampling_all/ap_simulation"
+        fanout_info = str(args.fan_out).replace(" ", "")
+        config_key = args.configs_path.split("/")[-2]
+        save_path_prefix = os.path.join(dryrun_savedir, f"hybrid_{args.system}_{config_key}_{fanout_info}")
+        save_path = os.path.join(save_path_prefix, f"rk#{rank}_epo10.pt")
+        print(f"[Note]Rank#{rank},epoch#{epoch} Save to {save_path}")
+        torch.save(counter_list, save_path)
+        exit()
 
         if args.debug and rank == 0:
             acc_file.close()
