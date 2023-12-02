@@ -40,11 +40,15 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         backend=backend,
     )
 
+    node_size = world_size
+    if args.nproc_per_node != -1 and args.hybrid:
+        node_size = args.nproc_per_node
+
     npc.init(
         rank=rank,
         local_rank=local_rank,
         world_size=world_size,
-        node_size=world_size if args.nproc_per_node == -1 else args.nproc_per_node,
+        node_size=node_size,
         num_nccl_comms=1,
         device=device,
         init_mp=True,
@@ -86,7 +90,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         num_total_val = val_idx.numel()
         num_val_per_rank = int(num_total_val // args.world_size)
         rank_val_idx = val_idx[rank * num_val_per_rank : (rank + 1) * num_val_per_rank]
-        acc_file_path = f"./logs/accuracy/Test2_Nov20_{args.model}_{args.system}_{args.dataset}_{world_size}.txt"
+        acc_file_path = f"./logs/accuracy/{args.model}_{args.system}_{args.dataset}_{world_size}.txt"
         if rank == 0:
             acc_file = open(acc_file_path, "w")
 
