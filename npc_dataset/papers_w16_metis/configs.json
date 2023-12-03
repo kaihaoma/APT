@@ -5,5 +5,6 @@
     "input_dim": 128,
     "num_classes": 172,
     "min_vids": "0,7243782,14483192,21544302,28788318,36031208,43162828,50183058,56926957,63888531,71132170,78285964,82622350,89857761,97010171,104249402,111059956",
-    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w16_metis/papers_w16-pure.bin"
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w16_metis/papers_w16-pure.bin",
+    "graph_path_all": "/efs/khma/Projects/NPC/npc_dataset/papers_w16_metis/papers_w16_metis_all.bin"
 }
