@@ -94,6 +94,10 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         if rank == 0:
             acc_file = open(acc_file_path, "w")
 
+    epoch_info_record_path = f"./logs/epoch_time/{args.tag}.txt"
+    if rank == 0:
+        epoch_info_file = open(epoch_info_record_path, "w")
+
     if args.system == "NP":
         sampler = npc.MixedNeighborSampler(
             rank=rank,
@@ -241,7 +245,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         else:
             raise ValueError(f"Invalid system:{args.system}")
 
-    print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
+    print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\t {utils.get_cuda_mem_usage_in_gb()}")
 
     if args.world_size > 1:
         if args.system == "MP":
@@ -256,10 +260,9 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 device_ids=[device],
                 output_device=device,
             )
-    print(f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
-    optimizer = torch.optim.Adam(training_model.parameters(), lr=0.001, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(training_model.parameters(), lr=1e-3, weight_decay=5e-4)
     dist.barrier()
-    print(f"[Note]Rank#{rank} Ready to train\t {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}")
+    print(f"[Note]Rank#{rank} Ready to train\t {utils.get_total_mem_usage_in_gb()}\t {utils.get_cuda_mem_usage_in_gb()}")
 
     training_mode = args.training_mode
     if training_mode == "training":
@@ -300,6 +303,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 )
                 print(f"[Note]{acc_str}")
                 acc_file.write(acc_str)
+            print(f"[Note]Rank#{rank} After first evaluation\t {utils.get_total_mem_usage_in_gb()}\t {utils.get_cuda_mem_usage_in_gb()}")
 
         record_flag = True
         record_list = []
@@ -345,7 +349,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 batch_pred = training_model(loading_result)
                 loss = F.cross_entropy(batch_pred, batch_labels)
                 if args.debug:
-                    total_loss += loss
+                    total_loss += loss.item()
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -370,13 +374,13 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                 ms_loading_time = 1000.0 * (t1 - t0)
                 ms_training_time = 1000.0 * (t2 - t1)
 
+                total_sampling_time += ms_sampling_time
+                total_loading_time += ms_loading_time
+                total_training_time += ms_training_time
                 if epoch >= warmup_epochs:
                     total_time[0] += ms_sampling_time
                     total_time[1] += ms_loading_time
                     total_time[2] += ms_training_time
-                    total_sampling_time += ms_sampling_time
-                    total_loading_time += ms_loading_time
-                    total_training_time += ms_training_time
                     if record_flag:
                         record_val = [
                             ms_sampling_time,
@@ -393,9 +397,9 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
             # epoch_tic_end = utils.get_time()
             if not args.debug and args.rank == 0:
                 epoch_time = total_sampling_time + total_loading_time + total_training_time
-                print(
-                    f"Rank: {rank} | Epoch: {epoch} | Sampling time: {total_sampling_time:3f}| Loading time: {total_loading_time:3f}| Training time: {total_training_time:3f}| Epoch time: {epoch_time:.3f} s"
-                )
+                epoch_info = f"Rank: {rank} | Epoch: {epoch} | Sampling time: {total_sampling_time:3f}| Loading time: {total_loading_time:3f}| Training time: {total_training_time:3f}| Epoch time: {epoch_time:.3f}\n"
+                print(epoch_info)
+                epoch_info_file.write(epoch_info)
 
             # evaluate
             if args.debug:
@@ -419,6 +423,9 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
                     print(f"[Note]{acc_str}")
                     acc_file.write(acc_str)
 
+        if rank == 0:
+            epoch_info_file.close()
+            print(f"[Note]Epoch time file save to {epoch_info_record_path}")
         if args.debug and rank == 0:
             acc_file.close()
             print(f"[Note]Acc file save to {acc_file_path}")
