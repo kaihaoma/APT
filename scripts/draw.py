@@ -25,7 +25,8 @@ def filter_list(x_list, y_list):
 
 def draw_multimachines_mainexp(path, output_prefix="./outputs/figures/mult-machine/"):
     # pre-defined
-    labels_list = ["DP", "NP", "SP", "MP", "DP+NP", "DP+SP"]
+    # labels_list = ["DP", "NP", "SP", "MP", "DP+NP", "DP+SP"]
+    labels_list = ["DP", "NP", "SP", "MP"]
     n_labels = len(labels_list)
 
     def labels_to_idx(sys):
@@ -49,7 +50,7 @@ def draw_multimachines_mainexp(path, output_prefix="./outputs/figures/mult-machi
     plot_y_list = [[] for _ in range(n_labels)]
 
     for lid, element in enumerate(elements):
-        if element[0].startswith("unused"):
+        if element[0].startswith("unused") or "DP+" in element[0]:
             continue
         # decode tag
         tag_list = element[0].split("_")
@@ -196,6 +197,7 @@ def draw_accuracy(path_prefix="../outputs/accuracy", filter_model="SAGE", filer_
     for file in sorted(os.listdir(path_prefix)):
         file_split = file.split("_")
         model, sys, dataset, num_workers = file_split
+        num_workers = num_workers.split(".")[0]
         print(f"[Note]model:{model}\t sys:{sys}\t dataset:{dataset}\t num_workers:{num_workers}")
         # filter by model, dataset, world_size
         if filter_model not in model or filer_dataset not in dataset or str(filer_worldsize) not in num_workers:
@@ -355,4 +357,4 @@ if __name__ == "__main__":
     # single_machine_path_list.append("../outputs/micro/varying_input_dim.csv")
     # draw_micro(path_list=single_machine_path_list, fixed="nl", output_prefix="../outputs/figures/micro/input_dim", additional_key="input_dim")
 
-    # draw_accuracy()
+    # draw_accuracy(filer_worldsize=16)
