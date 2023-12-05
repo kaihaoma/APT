@@ -98,3 +98,4 @@ papers_w16_metis_t9_NP_SAGE_nl17.25of16_cm4GB,16,SAGE,1024,128,16,-1,"[10, 10, 1
 unused_papers_w16_metis_variance[2]_t9_SP_SAGE_nl17.25of16_cm4GB,16,SAGE,1024,128,16,-1,"[10, 10, 10]",dryrun,4.0GB,cm4GB,8388608,1073741824,7,73,1232.79,594.86,2162.71,3990.36
 unused_"papers_w16_metis_variance[0, 2]_t9_MP_SAGE_nl17.25of16_cm4GB",16,SAGE,1024,128,16,-1,"[10, 10, 10]",dryrun,4.0GB,cm4GB,111059956,14215674368,7,73,19572.91,797.53,18886.79,39257.22
 unused_papers_w16_metis_t9_DP_SAGE_nl-1of16_cm0GB,16,SAGE,1024,128,16,-1,"[10, 10, 10]",dryrun,0.0GB,cm0GB,0,0,7,73,827.11,2754.02,879.77,4460.91
+unused_papers_w16_metis_variance[1]_t9_DP_SAGE_nl10of16_cm0GB,16,SAGE,1024,128,16,-1,"[10, 10, 10]",dryrun,0.0GB,cm0GB,0,0,7,73,813.3,18807.67,901.53,20522.5
