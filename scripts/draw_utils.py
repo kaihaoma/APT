@@ -5,38 +5,42 @@ import matplotlib.ticker as mtick
 import csv
 import draw_utils
 
-color_list = [
-    "r",
-    "g",
-    "c",
-    "m",
-]
-marker_list = ["o", "x", "v", "*"]
+# color_list = ["r", "g", "c", "m", "k"]
+# marker_list = ["o", "x", "v", "*", "^"]
+
+zuo_green = "#5daa2d"
+zuo_oriange = "#f2883f"
+zuo_blue = "#268be6"
+zuo_red = "#fc0464"
+zuo_purple = "#7863d6"
+
+color_list = [zuo_blue, zuo_green, zuo_oriange, zuo_purple, zuo_red]
+# color_list = "gbcmrw"
+marker_list = "oxv*^"
+linestyle_list = ["--", "--", "--", "--", "-"]
 
 
 def get_fmt(id):
-    linestyle = "-"
-    if id >= 4:
-        linestyle = "--"
-        id -= 4
-    return f"{marker_list[id]}{linestyle}{color_list[id]}"
+    return f"{marker_list[id]}{linestyle_list[id]}{color_list[id]}"
 
 
-def plt_init(figsize=None, labelsize=24):
+def plt_init(figsize=None, labelsize=24, subplot_flag=False):
     if figsize is not None:
         plt.figure(figsize=figsize)
+
     plt.clf()
-    ax = plt.gca()
-    ax.tick_params(
-        axis="both",
-        which="major",
-        labelsize=labelsize,
-        direction="in",
-        bottom=True,
-        top=True,
-        left=True,
-        right=True,
-    )
+    if not subplot_flag:
+        ax = plt.gca()
+        ax.tick_params(
+            axis="both",
+            which="major",
+            labelsize=labelsize,
+            direction="in",
+            bottom=True,
+            top=True,
+            left=True,
+            right=True,
+        )
 
 
 def plt_save_and_final(save_path):
@@ -72,15 +76,19 @@ def plot_line(
     legends_font_size=None,
     save_path=None,
     fig_size=None,
+    set_line_id=None,
+    axhyline=None,
+    legend_kwargs=None,
 ):
     plt_init(figsize=fig_size)
     ax = plt.gca()
     num_lines = len(plot_x_list)
+    print("[Note]num_lines:", num_lines)
     for line_id in range(num_lines):
         plt.plot(
             plot_x_list[line_id],
             plot_y_list[line_id],
-            get_fmt(line_id),
+            get_fmt(line_id) if set_line_id is None else get_fmt(set_line_id[line_id]),
             label=labels[line_id],
         )
     if scatter_list is not None:
@@ -109,29 +117,135 @@ def plot_line(
         plt.xlabel(xlabels, fontsize=font_size)
         plt.ylabel(ylabels, fontsize=font_size)
 
+    if axhyline is not None:
+        plt.axhline(y=axhyline, color="k", linestyle="--")
     if legends_font_size is None:
-        legends_font_size = font_size
+        legends_font_size = font_size - 6
 
-    if num_lines > 4:
-        lgd = ax.legend(
-            fontsize=legends_font_size,
-            bbox_to_anchor=(1, 1.5),
-            edgecolor="k",
-            ncols=4,
-            columnspacing=1.0,
-        )
-        plt.savefig(save_path, bbox_extra_artists=(lgd,), bbox_inches="tight")
-        plt.close("all")
-    else:
+    ax.legend(
+        fontsize=legends_font_size,
+        edgecolor="k",
+        ncols=2,
+        # loc="upper right",
+        # bbox_to_anchor=(0.7, 0.9),
+        columnspacing=1.2,
+        # handlelength=1.0,
+        # labelspacing=0.3,
+    )
+    plt_save_and_final(save_path=save_path)
+
+
+def plot_simple_line(plot_x_list, plot_y_list, label_list, xticks=None, yticks=None, xlabels=None, ylabels=None, legend=False, save_path=None):
+    ax = plt.gca()
+    ax.tick_params(
+        axis="both",
+        which="major",
+        labelsize=24,
+        direction="in",
+        bottom=True,
+        top=True,
+        left=True,
+        right=True,
+    )
+    for i, (x, y, label) in enumerate(zip(plot_x_list, plot_y_list, label_list)):
+        ax.plot(x, y, get_fmt(i), label=label)
+
+    if legend:
         ax.legend(
-            fontsize=legends_font_size,
+            fontsize=24,
             edgecolor="k",
-            ncols=2,
-            columnspacing=1.0,
+            ncols=6,
+            loc="upper center",
+            # bbox_to_anchor=(-0.1, 1.35),
+            bbox_to_anchor=(0.5, 1.4),
         )
+    if xticks is not None:
+        plt.xticks(xticks, fontsize=24)
+    if yticks is not None:
+        plt.yticks(yticks, fontsize=24)
+    if xlabels is not None:
+        plt.xlabel(xlabels, fontsize=24)
+    if ylabels is not None:
+        plt.ylabel(ylabels, fontsize=24)
+
+    if save_path is not None:
         plt_save_and_final(save_path=save_path)
 
 
+ori_label_list = ["DP", "MP", "SP", "NP"]
+map_label_list = ["GDP", "NFP", "SNP", "NFP"]
+
+
+# labels for whole subgraph
+def plot_main_exp(elements, label_list, xlabels=None, ylabels=None, subfig_title=None, save_path="tmp.png"):
+    subplot_x = 1
+    subplot_y = len(elements[0])
+    print(f"[Note]subplot_x:{subplot_x}\t subplot_y:{subplot_y}")
+    plt_init(figsize=(6.4 * subplot_y, 4 * subplot_x), subplot_flag=True)
+    for sub_x in range(subplot_x):
+        for sub_y in range(subplot_y):
+            sub_fig_id = sub_x * subplot_y + sub_y + 1
+            plot_x_list, plot_y_list = elements[sub_x][sub_y]
+            print(f"[Note]plot_x_list:{plot_x_list}\t plot_y_list:{plot_y_list}")
+            plt.subplot(subplot_x, subplot_y, sub_fig_id)
+            # plt.clf()
+            ax = plt.gca()
+            ax.tick_params(
+                axis="both",
+                which="major",
+                labelsize=24,
+                direction="in",
+                bottom=True,
+                top=True,
+                left=True,
+                right=True,
+            )
+            plot_simple_line(
+                plot_x_list=elements[sub_x][sub_y][0],
+                plot_y_list=elements[sub_x][sub_y][1],
+                label_list=label_list,
+                legend=(sub_fig_id == 2),
+                xlabels=xlabels,
+                ylabels=ylabels,
+                # yticks=[0, 1, 2, 3, 4, 5],
+            )
+            # plt.title(f"({sub_x},{sub_y})")
+            # show subfigure title on the bottom
+            plt.title(subfig_title[sub_x][sub_y], y=-0.5, fontsize=24)
+    # finalize and save
+    if save_path is not None:
+        plt_save_and_final(save_path=save_path)
+
+
+if __name__ == "__main__":
+    raise NotImplementedError
+    """
+    test_elements = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [1.5, 2.5, 3.5]]
+    test_stack_elements = []
+    for sub_element in test_elements:
+        val = []
+        for i in range(2):
+            val.append([v / 2 for v in sub_element])
+        test_stack_elements.append(val)
+
+    test_labels = ["a", "b", "c", "d"]
+    test_xlabel = [
+        "x1",
+        "x2",
+        "x3",
+    ]
+    draw_figure_group_stacked_bar(
+        elements=test_stack_elements,
+        labels=test_labels,
+        xlabel=test_xlabel,
+        # ylabel="y",
+        # yticks=[0, 2, 4, 6, 8, 10],
+        save_path="tmp.png",
+    )
+    """
+
+
+"""
 def plt_bar(
     elements,
     labels,
@@ -412,26 +526,35 @@ def draw_figure_group_stacked_bar(
         plt_save_and_final(save_path=save_path)
 
 
-if __name__ == "__main__":
-    test_elements = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [1.5, 2.5, 3.5]]
-    test_stack_elements = []
-    for sub_element in test_elements:
-        val = []
-        for i in range(2):
-            val.append([v / 2 for v in sub_element])
-        test_stack_elements.append(val)
+def plot_stacked_bar(
+    elements: np.ndarray,
+    xticks,
+    labels,
+    width=1,
+    xlabelticks=None,
+    xlabels=None,
+    ylabels=None,
+    save_path="tmp.png",
+):
+    num_stacked_layers, num_bars = elements.shape
 
-    test_labels = ["a", "b", "c", "d"]
-    test_xlabel = [
-        "x1",
-        "x2",
-        "x3",
-    ]
-    draw_figure_group_stacked_bar(
-        elements=test_stack_elements,
-        labels=test_labels,
-        xlabel=test_xlabel,
-        # ylabel="y",
-        # yticks=[0, 2, 4, 6, 8, 10],
-        save_path="tmp.png",
-    )
+    plt_init()
+    ax = plt.gca()
+    bottom = np.zeros(num_bars)
+    for yval, lab in zip(elements, labels):
+        print(f"[Note]xticks:{xticks}\t yval:{yval}\t")
+        ax.bar(xticks, yval, width=width, bottom=bottom, label=lab, edgecolor="k")
+        bottom += yval
+    font_size = 24
+    if ylabels is not None:
+        plt.ylabel(ylabels, fontsize=font_size)
+
+    if xlabelticks is not None:
+        plt.xticks(xlabelticks, xlabels, fontsize=font_size)
+    # set ylim
+    ymax = np.max(bottom)
+    ax.set_ylim([0, ymax * 1.4])
+    ax.legend(fontsize=font_size - 6, edgecolor="k", ncols=1)
+    if save_path is not None:
+        plt_save_and_final(save_path=save_path)
+"""
