@@ -35,7 +35,7 @@ def labels_to_idx(sys):
 
 
 ori_label_list = ["DP", "MP", "SP", "NP"]
-map_label_list = ["GDP", "NFP", "SNP", "NFP"]
+map_label_list = ["GDP", "NFP", "SNP", "DNP"]
 
 
 def draw_multimachines_mainexp(path_list, output_prefix="./outputs/figures/mult-machine/"):
@@ -62,7 +62,7 @@ def draw_multimachines_mainexp(path_list, output_prefix="./outputs/figures/mult-
     """
 
     plot_values = []
-    subfig_title = [["PS", "FS", "IH"]]
+    subfig_title = [["PS", "FS", "IM"]]
     for i in range(1):
         plot_values.append([])
         for j in range(3):
@@ -144,12 +144,13 @@ def draw_multimachines_mainexp(path_list, output_prefix="./outputs/figures/mult-
     )
 
     # motivation fig
-    """
+    legend_kwargs = {"ncols": 2, "bbox_to_anchor": (1.0, 0.9)}
+
     os.makedirs(output_prefix, exist_ok=True)
     draw_utils.plot_line(
-        plot_x_list=plot_values[0][0][0],
-        plot_y_list=plot_values[0][0][1],
-        labels=map_label_list + ["APT"],
+        plot_x_list=plot_values[0][0][0][:-1],
+        plot_y_list=plot_values[0][0][1][:-1],
+        labels=map_label_list,
         # xticks=list(range(9)),
         # yticks=list(range(0, math.ceil(y_max) + 5, 5)),
         # xlabels="GPU Cache Memory (GB)" if fixed == "nl" else "Number of Local Node Features",
@@ -157,8 +158,8 @@ def draw_multimachines_mainexp(path_list, output_prefix="./outputs/figures/mult-
         ylabels="Epoch Time (s)",
         legends_font_size=18,
         save_path=os.path.join("./tmp_fig/moti_multi_machines.pdf"),
+        **legend_kwargs,
     )
-    """
 
 
 def draw_mainexp(path_list=["./logs/ap/Nov15_single_machine_stable.csv"], fixed="nl", output_prefix="./outputs/figures/single-machine/"):
@@ -218,13 +219,12 @@ def draw_mainexp(path_list=["./logs/ap/Nov15_single_machine_stable.csv"], fixed=
 
     # dataset_list = list(dataset_dicts)
     label_list = ori_label_list
-    min_len = 100000
 
     xlabels = "GPU Cache Memory (GB)" if fixed == "nl" else "Number of Local Node Features"
     ylabels = "Epoch Time (s)"
     # init a 2d list
     graph_list = ["papers", "friendster", "igbfull"]
-    graph_short_list = ["PS", "FS", "IH"]
+    graph_short_list = ["PS", "FS", "IM"]
     model_list = ["SAGE", "GCN", "GAT"]
     elements = []
     subfig_title = []
@@ -241,11 +241,12 @@ def draw_mainexp(path_list=["./logs/ap/Nov15_single_machine_stable.csv"], fixed=
     for i in range(3):
         # draw one fig for 3 subgraph a row
         for j in range(3):
+            min_len = 7
             fig_key = (graph_list[i], model_list[j], "metis", -1)
-
-            print(f"[Note]fig_key:{fig_key}")
+            # fig_key = (graph_list[1], model_list[j], "random", -1)
+            # print(f"[Note]fig_key:{fig_key}")
             esti_ret = esti_dict[fig_key[:2]]
-            print("[Note]esti_ret:", esti_ret)
+            # print("[Note]esti_ret:", esti_ret)
             plot_x_list = []
             plot_y_list = []
             for sys in label_list:
@@ -256,7 +257,7 @@ def draw_mainexp(path_list=["./logs/ap/Nov15_single_machine_stable.csv"], fixed=
                 y_list = data_dicts[key][1]
                 min_len = min(min_len, len(x_list))
                 # filter_x_list, filter_y_list = filter_list(x_list, y_list)
-                print(f"[Note]x_list:{x_list}\t y_list:{y_list}")
+                # print(f"[Note]x_list:{x_list}\t y_list:{y_list}")
                 # print(f"[Note]key:{key}\t data_dicts:{filter_x_list}\t filter_y_list:{filter_y_list}")
                 plot_x_list.append(x_list)
                 plot_y_list.append(y_list)
@@ -264,8 +265,8 @@ def draw_mainexp(path_list=["./logs/ap/Nov15_single_machine_stable.csv"], fixed=
             # add esti
             esti_x_list = plot_x_list[-1][:min_len]
             esti_y_list = [plot_y_list[labels_to_idx(esti_ret[idx])][idx] for idx in esti_x_list]
-            print("[Note]esti_x_list:", esti_x_list)
-            print("[Note]esti_y_list:", esti_y_list)
+            # print("[Note]esti_x_list:", esti_x_list)
+            # print("[Note]esti_y_list:", esti_y_list)
             plot_x_list.append(esti_x_list)
             plot_y_list.append(esti_y_list)
             plot_x_list = [sub_list[:min_len] for sub_list in plot_x_list]
@@ -276,28 +277,44 @@ def draw_mainexp(path_list=["./logs/ap/Nov15_single_machine_stable.csv"], fixed=
             elements[0][j] = (plot_x_list, plot_y_list)
 
             # single fig for a graph*model
-            """
-            draw_utils.plot_line(
-                plot_x_list=plot_x_list,
-                plot_y_list=plot_y_list,
-                labels=label_list,
-                # xticks=list(range(9)),
-                # yticks=[0, 5, 10, 15, 20],
-                xlabels="GPU Cache Memory (GB)" if fixed == "nl" else "Number of Local Node Features",
-                ylabels="Epoch Time (s)",
-                legends_font_size=18,
-                save_path=os.path.join(output_prefix, f"moti_{fig_key[0]}_{fig_key[1]}_{fig_key[2]}_{fig_key[3]}.pdf"),
-            )
-            """
+            legend_kwargs = {"ncols": 2}
+            if i == 0 and j == 0:
+                draw_utils.plot_line(
+                    plot_x_list=plot_x_list[:-1],
+                    plot_y_list=plot_y_list[:-1],
+                    labels=map_label_list,
+                    # xticks=list(range(9)),
+                    # yticks=[0, 5, 10, 15, 20],
+                    xlabels="GPU Cache Memory (GB)" if fixed == "nl" else "Number of Local Node Features",
+                    ylabels="Epoch Time (s)",
+                    legends_font_size=18,
+                    save_path=os.path.join("./osdi_figs", f"moti_{fig_key[0]}_{fig_key[1]}_{fig_key[2]}_{fig_key[3]}.pdf"),
+                    **legend_kwargs,
+                )
+
+        # speedup
+        ratio_list = [[] for _ in range(4)]
+        for jj in range(3):
+            for k in range(len(plot_x_list[jj])):
+                min_val = min([plot_y_list[i][k] for i in range(4)])
+                for sys_id in range(4):
+                    ratio_list[sys_id].append(plot_y_list[sys_id][k] / min_val)
+
+        for jj in range(4):
+            print(f"[Note]label:{map_label_list[jj]}\t max:{max(ratio_list[jj])}\t min:{min(ratio_list[jj])}")
+
         # draw per row (3subfigs)
+        """
         draw_utils.plot_main_exp(
             elements=elements,
             label_list=map_label_list + ["APT"],
             xlabels=xlabels,
             ylabels=ylabels,
             subfig_title=[subfig_title[i]],
+            show_legend=(i == 0),
             save_path=f"osdi_figs/main_exp_row{i}.pdf",
         )
+        """
 
 
 def draw_accuracy(
@@ -354,6 +371,11 @@ def draw_accuracy(
         # plot_x_list = np.array(plot_x_list)
         # plot_y_list = np.array(plot_y_list)
         ymax = max([max(sub_list) for sub_list in plot_y_list]) + 0.005
+        legend_kwargs = {
+            "ncols": 3,
+            "columnspacing": 1.5 if filter_worldsize == 4 else 1.1,
+            "handlelength": 1.2,
+        }
         draw_utils.plot_line(
             plot_x_list=plot_x_list,
             plot_y_list=plot_y_list,
@@ -364,6 +386,7 @@ def draw_accuracy(
             save_path=f"./tmp_fig/numepoch_{filter_model}_{filer_dataset}_{filter_worldsize}.pdf",
             legends_font_size=20,
             axhyline=ymax,
+            **legend_kwargs,
         )
 
         plot_x_time_list = []
@@ -379,7 +402,9 @@ def draw_accuracy(
         # xmax = [max(sub_list) for sub_list in plot_x_time_list]
         ymax = max([max(sub_list) for sub_list in plot_y_time_list]) + 0.01
         # legend column-spacing=1.2 legend box for world_size = 16
-        xticks = [0, 1000, 2000] if filter_worldsize == 4 else [0, 2000, 4000]
+        xticks = [0, 250, 500, 750, 1000] if filter_worldsize == 4 else [0, 1000, 2000, 3000, 4000]
+        column_spacing = 1.3 if filter_worldsize == 16 else 3.5
+        legend_kwargs = {"ncols": 2, "columnspacing": column_spacing}
         draw_utils.plot_line(
             plot_x_list=plot_x_time_list,
             plot_y_list=plot_y_time_list,
@@ -392,6 +417,7 @@ def draw_accuracy(
             save_path=f"./tmp_fig/Time_{filter_model}_{filer_dataset}_{filter_worldsize}.pdf",
             legends_font_size=24,
             axhyline=ymax,
+            **legend_kwargs,
         )
 
         plot_x_list = []
@@ -465,8 +491,8 @@ def draw_micro(
             print(f"[Note]data dict key: {key}")
 
         # dataset_list = list(dataset_dicts)
-        label_list = ["DP", "NP", "SP", "MP"]
-        n_labels = len(label_list)
+        # label_list = ["DP", "NP", "SP", "MP"]
+        n_labels = len(ori_label_list)
         # one dataset, model a graph
         plot_values = []
         for i in range(1):
@@ -474,22 +500,24 @@ def draw_micro(
             for j in range(2):
                 plot_values[i].append([])
 
-        subfig_title = [["Input dim 128", "Input dim 512"]]
+        subfig_title = [["Fanout (15,10)", "Fanout (25,10)"]]
+        """
         select_fig_key = []
         for sk in select_key:
             for fig_key in fig_key_set:
                 if int(fig_key[-1]) == sk:
                     select_fig_key.append(fig_key)
         print(f"[Note]select_fig_key:{select_fig_key}")
+        """
 
-        for fig_id, fig_key in enumerate(select_fig_key):
+        for fig_id, fig_key in enumerate(fig_key_set):
             print(f"[Note]fig_key:{fig_key}")
-            # print(f"[Note]fig_key[-1]:{int(fig_key[-1])}\t select_key:{select_key}\t flag:{int(fig_key[-1]) not in select_key}")
-            print(f"[Note]fig_key:{fig_key}\t fig_id:{fig_id}\t select_key:{select_key[fig_id]}")
+
+            print(f"[Note]fig_key:{fig_key}\t fig_id:{fig_id}")
             # subfig_title[0].append(fig_key[-1])
             plot_x_list = [[] for _ in range(n_labels)]
             plot_y_list = [[] for _ in range(n_labels)]
-            for sys_id, sys in enumerate(label_list):
+            for sys_id, sys in enumerate(ori_label_list):
                 key = (*fig_key, sys)
                 if key not in data_dicts:
                     continue
@@ -497,8 +525,8 @@ def draw_micro(
                 y_list = data_dicts[key][1]
                 filter_x_list, filter_y_list = filter_list(x_list, y_list)
                 print(f"[Note]key:{key}\t data_dicts:{filter_x_list}\t filter_y_list:{filter_y_list}")
-                plot_x_list[sys_id] = filter_x_list
-                plot_y_list[sys_id] = filter_y_list
+                plot_x_list[sys_id] = filter_x_list[:-1]
+                plot_y_list[sys_id] = filter_y_list[:-1]
 
             print(f"[Note]plot_x_list:{plot_x_list}")
             print(f"[Note]plot_y_list:{plot_y_list}")
@@ -508,7 +536,7 @@ def draw_micro(
         print(f"[Note]plot_values:{plot_values}")
         draw_utils.plot_main_exp(
             elements=plot_values,
-            label_list=["GDP", "DNP", "SNP", "NFP"],
+            label_list=map_label_list,
             xlabels="GPU Cache Memory (GB)" if fixed == "nl" else "Number of Local Node Features",
             ylabels="Epoch Time (s)",
             subfig_title=subfig_title,
@@ -537,11 +565,11 @@ if __name__ == "__main__":
     # 3. main exp multi machine
     # 4. micro exp varying hidden dim, input dim, fanout
     # 5. cost model accuracy
-    draw_sanity_check = True
+    draw_sanity_check = False
     draw_main_exp_single_machine = False
-    draw_main_exp_multi_machine = True
+    draw_main_exp_multi_machine = False
     draw_micro_exp = False
-    draw_cost_model_accuracy = False
+    draw_cost_model_accuracy = True
 
     fixed_list = ["nl", "gpu_cache_mem"]
 
@@ -555,6 +583,8 @@ if __name__ == "__main__":
         single_machine_path_list.append("./outputs/speed/single_machine/friendster_w4_metis.csv")
         single_machine_path_list.append("./outputs/speed/single_machine/igbfull_w4_metis.csv")
         draw_mainexp(path_list=single_machine_path_list, fixed="nl", output_prefix="./tmp_fig")
+
+        # draw_mainexp(path_list=["./outputs/speed/single_machine/friendster_w4_random.csv"], fixed="nl")
     # multi-machines
     if draw_main_exp_multi_machine:
         multi_machine_path_prefix = "./outputs/speed/multi_machine/"
@@ -580,24 +610,6 @@ if __name__ == "__main__":
         # single_machine_path_list = []
         single_machine_path_list = ["./outputs/micro/varying_fanout.csv"]
         draw_micro(path_list=single_machine_path_list, fixed="nl", output_prefix="./outputs/figures/micro/vary_fanout", additional_key="fanout")
-
-        # single_machine_path_list = ["./outputs/micro/varying_hidden_dim.csv"]
-        draw_micro(
-            path_list=single_machine_path_list,
-            fixed="nl",
-            output_prefix="./outputs/figures/micro/vary_fanout",
-            additional_key="hidden_dim",
-            select_key=[64, 256],
-        )
-
-        single_machine_path_list = ["./outputs/micro/varying_input_dim.csv"]
-        draw_micro(
-            path_list=single_machine_path_list,
-            fixed="nl",
-            output_prefix="./outputs/figures/micro/vary_fanout",
-            additional_key="input_dim",
-            select_key=[128, 512],
-        )
 
     if draw_cost_model_accuracy:
         from analysis_costmodel import draw_costmodel_acc

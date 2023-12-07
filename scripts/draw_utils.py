@@ -16,12 +16,17 @@ zuo_purple = "#7863d6"
 
 color_list = [zuo_blue, zuo_green, zuo_oriange, zuo_purple, zuo_red]
 # color_list = "gbcmrw"
-marker_list = "oxv*^"
+marker_list = "oxvD*"
+marker_size_list = [10, 10, 10, 10, 15]
 linestyle_list = ["--", "--", "--", "--", "-"]
 
 
 def get_fmt(id):
-    return f"{marker_list[id]}{linestyle_list[id]}{color_list[id]}"
+    return f"{marker_list[id]}{linestyle_list[id]}"
+
+
+def get_color(id):
+    return color_list[id]
 
 
 def plt_init(figsize=None, labelsize=24, subplot_flag=False):
@@ -78,17 +83,21 @@ def plot_line(
     fig_size=None,
     set_line_id=None,
     axhyline=None,
-    legend_kwargs=None,
+    **legend_kwargs,
 ):
     plt_init(figsize=fig_size)
     ax = plt.gca()
     num_lines = len(plot_x_list)
     print("[Note]num_lines:", num_lines)
     for line_id in range(num_lines):
+        fmt_id = line_id if set_line_id is None else set_line_id[line_id]
         plt.plot(
             plot_x_list[line_id],
             plot_y_list[line_id],
-            get_fmt(line_id) if set_line_id is None else get_fmt(set_line_id[line_id]),
+            get_fmt(fmt_id),
+            color=get_color(fmt_id),
+            markerfacecolor="none",
+            markersize=marker_size_list[fmt_id],
             label=labels[line_id],
         )
     if scatter_list is not None:
@@ -122,16 +131,27 @@ def plot_line(
     if legends_font_size is None:
         legends_font_size = font_size - 6
 
+    def flip(items, ncol):
+        return itertools.chain(*[items[i::ncol] for i in range(ncol)])
+
+    handles, labels = ax.get_legend_handles_labels()
+    ncols = legend_kwargs.get("ncols", 1)
+    print(f"[Note]ncols:{ncols}")
     ax.legend(
+        flip(handles, ncols),
+        flip(labels, ncols),
         fontsize=legends_font_size,
         edgecolor="k",
-        ncols=2,
+        **legend_kwargs,
+        # ncols=2,
         # loc="upper right",
         # bbox_to_anchor=(0.7, 0.9),
-        columnspacing=1.2,
+        # columnspacing=1.2,
         # handlelength=1.0,
         # labelspacing=0.3,
     )
+
+    # ax.legend(, ncol=3)
     plt_save_and_final(save_path=save_path)
 
 
@@ -148,16 +168,19 @@ def plot_simple_line(plot_x_list, plot_y_list, label_list, xticks=None, yticks=N
         right=True,
     )
     for i, (x, y, label) in enumerate(zip(plot_x_list, plot_y_list, label_list)):
-        ax.plot(x, y, get_fmt(i), label=label)
+        ax.plot(x, y, get_fmt(i), color=get_color(i), markerfacecolor="none", markersize=marker_size_list[i], label=label)
 
     if legend:
         ax.legend(
             fontsize=24,
             edgecolor="k",
             ncols=6,
-            loc="upper center",
+            # loc="upper center",
             # bbox_to_anchor=(-0.1, 1.35),
-            bbox_to_anchor=(0.5, 1.4),
+            # three figures
+            # bbox_to_anchor=(0.5, 1.4),
+            # two figures
+            bbox_to_anchor=(0.9, 1.4),
         )
     if xticks is not None:
         plt.xticks(xticks, fontsize=24)
@@ -177,7 +200,7 @@ map_label_list = ["GDP", "NFP", "SNP", "NFP"]
 
 
 # labels for whole subgraph
-def plot_main_exp(elements, label_list, xlabels=None, ylabels=None, subfig_title=None, save_path="tmp.png"):
+def plot_main_exp(elements, label_list, xlabels=None, ylabels=None, subfig_title=None, show_legend=True, save_path="tmp.png"):
     subplot_x = 1
     subplot_y = len(elements[0])
     print(f"[Note]subplot_x:{subplot_x}\t subplot_y:{subplot_y}")
@@ -204,15 +227,48 @@ def plot_main_exp(elements, label_list, xlabels=None, ylabels=None, subfig_title
                 plot_x_list=elements[sub_x][sub_y][0],
                 plot_y_list=elements[sub_x][sub_y][1],
                 label_list=label_list,
-                legend=(sub_fig_id == 2),
+                legend=(sub_fig_id == 2 and show_legend),
                 xlabels=xlabels,
-                ylabels=ylabels,
+                ylabels=ylabels if sub_fig_id == 1 else None,
                 # yticks=[0, 1, 2, 3, 4, 5],
             )
             # plt.title(f"({sub_x},{sub_y})")
             # show subfigure title on the bottom
-            plt.title(subfig_title[sub_x][sub_y], y=-0.5, fontsize=24)
+            plt.title(subfig_title[sub_x][sub_y], y=-0.4, fontsize=24)
     # finalize and save
+    if save_path is not None:
+        plt_save_and_final(save_path=save_path)
+
+
+def plot_stacked_bar(
+    elements: np.ndarray,
+    xticks,
+    labels,
+    width=1,
+    xlabelticks=None,
+    xlabels=None,
+    ylabels=None,
+    save_path="tmp.png",
+):
+    num_stacked_layers, num_bars = elements.shape
+
+    plt_init()
+    ax = plt.gca()
+    bottom = np.zeros(num_bars)
+    for yval, lab in zip(elements, labels):
+        print(f"[Note]xticks:{xticks}\t yval:{yval}\t")
+        ax.bar(xticks, yval, width=width, bottom=bottom, label=lab, edgecolor="k")
+        bottom += yval
+    font_size = 24
+    if ylabels is not None:
+        plt.ylabel(ylabels, fontsize=font_size)
+
+    if xlabelticks is not None:
+        plt.xticks(xlabelticks, xlabels, fontsize=font_size)
+    # set ylim
+    ymax = np.max(bottom)
+    ax.set_ylim([0, ymax * 1.4])
+    ax.legend(fontsize=font_size - 6, edgecolor="k", ncols=1)
     if save_path is not None:
         plt_save_and_final(save_path=save_path)
 
@@ -525,36 +581,4 @@ def draw_figure_group_stacked_bar(
     if save_path is not None:
         plt_save_and_final(save_path=save_path)
 
-
-def plot_stacked_bar(
-    elements: np.ndarray,
-    xticks,
-    labels,
-    width=1,
-    xlabelticks=None,
-    xlabels=None,
-    ylabels=None,
-    save_path="tmp.png",
-):
-    num_stacked_layers, num_bars = elements.shape
-
-    plt_init()
-    ax = plt.gca()
-    bottom = np.zeros(num_bars)
-    for yval, lab in zip(elements, labels):
-        print(f"[Note]xticks:{xticks}\t yval:{yval}\t")
-        ax.bar(xticks, yval, width=width, bottom=bottom, label=lab, edgecolor="k")
-        bottom += yval
-    font_size = 24
-    if ylabels is not None:
-        plt.ylabel(ylabels, fontsize=font_size)
-
-    if xlabelticks is not None:
-        plt.xticks(xlabelticks, xlabels, fontsize=font_size)
-    # set ylim
-    ymax = np.max(bottom)
-    ax.set_ylim([0, ymax * 1.4])
-    ax.legend(fontsize=font_size - 6, edgecolor="k", ncols=1)
-    if save_path is not None:
-        plt_save_and_final(save_path=save_path)
 """
