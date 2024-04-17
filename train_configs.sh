@@ -1,11 +1,11 @@
 
 fanout_array=(10,10,10)
 system_array=(NPC)
-logs_dir=./logs/ap/new_machines.csv
+logs_dir=./logs/acc.csv
 
-configs_name_all=(papers_w8_metis friendster_w8_metis igblarge_w8_metis)
+# configs_name_all=(papers_w8_metis friendster_w8_metis igblarge_w8_metis)
 # configs_name=(papers_w8_metis)
-configs_name=(products_w8)
+configs_name=(papers_w8_metis)
 
 
 for fanout in ${fanout_array[@]}
@@ -13,8 +13,9 @@ do
   for configs in ${configs_name[@]}
   do
   configs_path=./npc_dataset/${configs}/configs.json
-  # cache_mode=dryrun
-  cache_mode=none
-  python examples/mp_runner.py  --model SAGE --fan_out ${fanout} --logs_dir ${logs_dir} --tag ${configs} --configs_path ${configs_path} --cache_mode ${cache_mode} --debug
+  cache_mode=dryrun
+  # cache_mode=none
+  # python examples/mp_runner.py  --model SAGE --fan_out ${fanout} --logs_dir ${logs_dir} --tag ${configs} --configs_path ${configs_path} --cache_mode ${cache_mode} --debug
+  python examples/mp_runner.py --num_epochs 50 --model SAGE --fan_out ${fanout} --logs_dir ${logs_dir} --tag ${configs} --configs_path ${configs_path} --cache_mode ${cache_mode} --dataset ogbn-papers100M --input_dim 128 --debug
   done
 done

@@ -207,6 +207,25 @@ def determine_feature_reside_cpu(args, global_node_feats: torch.Tensor, shared_t
     return [localnode_feats_idx, localnode_feats] + shared_tensor_list
 
 
+def load_graph(args):
+    """
+    if args.debug:
+        print(f"[Note]Debug mode, load {args.dataset} by DGL api ")
+        dataset = AsNodePredDataset(
+            DglNodePropPredDataset(args.dataset, root="./dgl_dataset")
+        )
+        graph = dataset[0]
+        graph = graph.remove_self_loop().add_self_loop()
+        val_idx = dataset.val_idx
+        return (graph, val_idx)
+    """
+    graph_path = args.graph_path_all if args.debug else args.graph_path
+    print(f"[Note]Load graph from {graph_path}")
+    dataset_tuple = dgl.load_graphs(graph_path)
+    graph = dataset_tuple[0][0]
+    return graph
+
+
 # output: args, shared_tensor_list
 def pre_spawn():
     args = init_args()
@@ -214,48 +233,54 @@ def pre_spawn():
     mp.set_start_method("spawn", force=True)
 
     t0 = time.time()
-    if args.debug:
-        dataset = AsNodePredDataset(DglNodePropPredDataset(args.dataset), save_dir="./dgl_dataset")
-        graph = dataset[0]
-        graph = graph.remove_self_loop().add_self_loop()
-        val_idx = dataset.val_idx
-    else:
-        dataset_tuple = dgl.load_graphs(args.graph_path)
-        graph = dataset_tuple[0][0]
+    graph: dgl.DGLGraph = load_graph(args)
+    # if args.debug:
+    #     dataset = AsNodePredDataset(DglNodePropPredDataset(args.dataset), save_dir="./dgl_dataset")
+    #     graph = dataset[0]
+    #     graph = graph.remove_self_loop().add_self_loop()
+    #     val_idx = dataset.val_idx
+    # else:
+    #     dataset_tuple = dgl.load_graphs(args.graph_path)
+    #     graph = dataset_tuple[0][0]
 
     loading_dataset_time = round(time.time() - t0, 2)
     print(f"[Note]Load data from {args.graph_path}, Time:{loading_dataset_time} seconds\n result:{graph}\n")
     print(f"[Note]After load whole graph, {get_total_mem_usage_in_gb()}")
-
-    def find_train_mask(graph):
-        for k in list(graph.ndata.keys()):
-            if "train_mask" in k:
-                return k
+    
+    def find_key_in_graph(graph, key):
+        for graph_key in list(graph.ndata.keys()):
+            if key in graph_key:
+                return graph_key
         return None
 
-    global_train_mask = graph.ndata[find_train_mask(graph)].bool()
+    global_train_mask = graph.ndata[find_key_in_graph(graph, "train_mask")].bool()
     input_dim = args.input_dim
     total_nodes = graph.num_nodes()
     args.num_nodes = total_nodes
     if args.debug:
         # load whole graph
-        global_node_feats = graph.ndata["feat"]
-        global_labels = graph.ndata["label"]
+        global_node_feats = graph.ndata[find_key_in_graph(graph, "feat")]
+        global_labels = (
+            graph.ndata[find_key_in_graph(graph, "label")].long().nan_to_num()
+        )
     else:
         # load pure graph without node features & labels
         global_node_feats = torch.rand((total_nodes, input_dim), dtype=torch.float32)
         global_labels = torch.randint(args.num_classes, (total_nodes,))
 
-    clear_graph_data(graph)
+    # clear_graph_data(graph)
     indptr, indices, edges_ids = graph.adj_tensors("csc")
-    del edges_ids, graph
 
     shared_tensor_list = [global_labels, global_train_mask, indptr, indices]
     # append val_idx for validation
     if args.debug:
         shared_tensor_list.append(global_node_feats.clone())
+        global_val_mask = graph.ndata[find_key_in_graph(graph, "val_mask")].bool()
+        val_idx = torch.masked_select(torch.arange(graph.num_nodes()), global_val_mask)
         shared_tensor_list.append(val_idx)
 
+    del edges_ids, graph
+    
     for tensor in shared_tensor_list:
         tensor.share_memory_()
 
@@ -341,8 +366,10 @@ def init_args(args=None) -> argparse.Namespace:
     else:
         raise f"[Note] configs:{args.configs_path} not exists!"
 
-    args.min_vids = list(map(int, args.min_vids.split(",")))
-    args.fan_out = list(map(int, args.fan_out.split(",")))
+    if not isinstance(args.min_vids, list):
+        args.min_vids = list(map(int, args.min_vids.split(",")))
+    if not isinstance(args.fan_out, list):
+        args.fan_out = list(map(int, args.fan_out.split(",")))
 
     # cache_memory to bytes
     if args.cache_memory > 0:

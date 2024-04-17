@@ -5,11 +5,13 @@ import atexit
 import importlib
 
 
-def get_pre_defined_args(tag_prefix):
+def get_pre_defined_args(args):
+    fanout_info = str(args.fan_out).replace(" ", "")
+    config_key = args.configs_path.split("/")[-2]
     num_try_times = 1
-    cache_memory_in_gbs = [1]
+    cache_memory_in_gbs = [4]
     # cache_memory_in_gbs = list(range(6))
-    system = ["SP", "MP"]
+    system = ["SP"]
     # num_localnode_feats_in_workers = list(range(4, 8))
     num_localnode_feats_in_workers = [-1]
     # generate args
@@ -23,7 +25,16 @@ def get_pre_defined_args(tag_prefix):
                     tag = f"t{try_times}_{sys}_nl{nl}of8_cm{cache_mem}GB"
                     # single-machine case
                     # tag = f"{tag_prefix}_{sys}_cm{cache_mem}GB"
-                    yield {"system": sys, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
+                    key = "npc" if sys == "NP" else "ori"
+                    dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"
+                    yield {
+                        "system": sys,
+                        "cache_memory": cm,
+                        "num_localnode_feats_in_workers": nl,
+                        "tag": tag,
+                        "num_hidden": 32,
+                        "dryrun_file_path": dryrun_file_path,
+                    }
 
 
 def get_user_input(tag_prefix):
@@ -40,7 +51,12 @@ def get_user_input(tag_prefix):
             cm = cache_mem * 1024 * 1024 * 1024
             tag = f"test_t{try_times}_{sys}_nl{nl}of8_cm{cache_mem}GB"
             try_times += 1
-            yield {"system": sys, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
+            yield {
+                "system": sys,
+                "cache_memory": cm,
+                "num_localnode_feats_in_workers": nl,
+                "tag": tag,
+            }
         except:
             sys = "DP"
             nl = 4
@@ -48,7 +64,12 @@ def get_user_input(tag_prefix):
             cm = cache_mem * 1024 * 1024 * 1024
 
             tag = f"test_t{try_times}_{sys}_nl{nl}of8_cm{cache_mem}GB"
-            yield {"system": sys, "cache_memory": cm, "num_localnode_feats_in_workers": nl, "tag": tag}
+            yield {
+                "system": sys,
+                "cache_memory": cm,
+                "num_localnode_feats_in_workers": nl,
+                "tag": tag,
+            }
 
 
 if __name__ == "__main__":
@@ -57,20 +78,33 @@ if __name__ == "__main__":
     nproc = world_size if args.nproc_per_node == -1 else args.nproc_per_node
     ranks = args.ranks
     local_ranks = args.local_ranks
-    print(f"[Note]procs:{nproc}\t world_size:{world_size}\t ranks:{ranks}\t local_ranks:{local_ranks}")
+    print(
+        f"[Note]procs:{nproc}\t world_size:{world_size}\t ranks:{ranks}\t local_ranks:{local_ranks}"
+    )
 
     train_module = importlib.import_module("train")
-    for inputs in get_pre_defined_args(args.tag):
+    for inputs in get_pre_defined_args(args):
         # for inputs in get_user_input(args.tag):
         for key, value in inputs.items():
             setattr(args, key, value)
         utils.show_args(args)
-        shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(args, global_nfeat, shared_tensor_list)
+        shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(
+            args, global_nfeat, shared_tensor_list
+        )
         # reimport train.py
         run = importlib.reload(train_module).run
         processes = []
         for i in range(nproc):
-            p = mp.Process(target=run, args=(ranks[i], local_ranks[i], world_size, args, shared_tensors_with_nfeat))
+            p = mp.Process(
+                target=run,
+                args=(
+                    ranks[i],
+                    local_ranks[i],
+                    world_size,
+                    args,
+                    shared_tensors_with_nfeat,
+                ),
+            )
             atexit.register(utils.kill_proc, p)
             p.start()
             processes.append(p)
