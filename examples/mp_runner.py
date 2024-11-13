@@ -8,25 +8,31 @@ import importlib
 def get_pre_defined_args(args):
     fanout_info = str(args.fan_out).replace(" ", "")
     config_key = args.configs_path.split("/")[-2]
-    num_try_times = 1
-    # cache_memory_in_gbs = [1]
-    cache_memory_in_gbs = list(range(8))
+    
+    cache_memory_in_gbs = [0, 2, 4, 6]
     system = ["DP", "NP", "SP", "MP"]
-    models = ["SAGE", "GCN", "GAT"]
+    # system = ["SP"]
+    hidden_dims = [8, 32, 128, 512]
+    # hidden_dims = [256]
+    # models = ["SAGE", "GCN", "GAT"]
+    models = ["SAGE"]
 
     # num_localnode_feats_in_workers = list(range(4, 8))
     num_localnode_feats_in_workers = [-1]
     # generate args
-    for try_times in range(num_try_times):
-        for cache_mem in cache_memory_in_gbs:
-            for nl in num_localnode_feats_in_workers:
-                for sys in system:
-                    for model in models:
+    for cache_mem in cache_memory_in_gbs:
+        for nl in num_localnode_feats_in_workers:
+            for model in models:
+                for num_hidden in hidden_dims:
+                    jug = (cache_mem == 4) + (num_hidden == 32)
+                    if jug == 0:
+                        continue
+                    for sys in system:
                         cm = cache_mem * 1024 * 1024 * 1024
                         # cross-machine feat loading case
-                        tag = f"t{try_times}_{sys}_{model}_nl{nl}of8_cm{cache_mem}GB"
+                        tag = f"{sys}_{model}_nl{nl}of8_cm{cache_mem}GB"
                         # model specific
-                        num_heads, num_hidden = (4, 8) if model == "GAT" else (-1, 16)
+                        num_heads, num_hidden = (4, 8) if model == "GAT" else (-1, num_hidden)
                         key = "npc" if sys == "NP" else "ori"
                         # dryrun path
                         dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"

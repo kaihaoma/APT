@@ -3,6 +3,7 @@
     "num_workers": 8,
     "world_size": 8,
     "num_classes": 172,
+    "input_dim": 128,
     "min_vids": "0,13882640,27762320,41648796,55527938,69409147,83293712,97175119,111059956",
     "graph_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w8_random/papers_random.bin"
 }

@@ -6,6 +6,7 @@
     "input_dim": 128,
     "min_vids": "0,13717553,27592167,42068855,56543827,71017008,85487258,99909142,111059956",
     "graph_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w8_metis/ogbn-papers100MM8.bin",
+    "graph_path_all": "/efs/khma/Projects/NPC/npc_dataset/papers_w8_metis/ogbn-papers100MM8.bin",
     "sampling_path": "/efs/khma/Projects/NPC/sampling_all/npc2/papers_w8",
     "idx_mem_path": "/efs/khma/Projects/NPC/npc_dataset/papers_w8_metis/papersM8_sorted_idx_mem.pt"
 }

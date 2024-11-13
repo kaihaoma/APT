@@ -3,6 +3,7 @@
     "num_workers": 8,
     "world_size": 8,
     "num_classes": 3,
+    "input_dim": 256,
     "min_vids": "0,8203474,16403017,24602603,32805548,41004455,49209736,57410200,65608366",
     "graph_path": "/efs/khma/Projects/NPC/npc_dataset/friendster_w8_random/friendster_random.bin"
 }
