@@ -9,13 +9,15 @@ def get_pre_defined_args(args):
     fanout_info = str(args.fan_out).replace(" ", "")
     config_key = args.configs_path.split("/")[-2]
     
+    # [NOTE] run the exp of varying cache memory
     cache_memory_in_gbs = [0, 2, 4, 6]
     system = ["DP", "NP", "SP", "MP"]
-    # system = ["SP"]
+    #[NOTE] run the varying hidden_dim exp
     hidden_dims = [8, 32, 128, 512]
-    # hidden_dims = [256]
-    # models = ["SAGE", "GCN", "GAT"]
     models = ["SAGE"]
+    # [NOTE] run the gat exp
+    #models = ["GAT"]
+    #hidden_dims = [4,8,16,32]
 
     # num_localnode_feats_in_workers = list(range(4, 8))
     num_localnode_feats_in_workers = [-1]
@@ -24,6 +26,7 @@ def get_pre_defined_args(args):
         for nl in num_localnode_feats_in_workers:
             for model in models:
                 for num_hidden in hidden_dims:
+                    #[NOTE] we control that we only change one variable and others are fixed
                     jug = (cache_mem == 4) + (num_hidden == 32)
                     if jug == 0:
                         continue
@@ -32,7 +35,7 @@ def get_pre_defined_args(args):
                         # cross-machine feat loading case
                         tag = f"{sys}_{model}_nl{nl}of8_cm{cache_mem}GB"
                         # model specific
-                        num_heads, num_hidden = (4, 8) if model == "GAT" else (-1, num_hidden)
+                        num_heads, num_hidden = (4, num_hidden) if model == "GAT" else (-1, num_hidden)
                         key = "npc" if sys == "NP" else "ori"
                         # dryrun path
                         dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"

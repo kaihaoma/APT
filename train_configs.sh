@@ -1,13 +1,15 @@
 fanout_array=(10,10,10)
+# For exp of varying fanout
+# fanout_array=(5,10, 10,15 10,10,10 10,15,20)
 system_array=(NPC)
+# log file, change it to your own directory
 logs_dir=./zzz_ppopp2/gsplit_4gpu.csv
 
-# configs_name_all=(friendster_w4_metis)
-# configs_name_all=(products_w8)
-# configs_name_all=(papers_w4_metis)
+
 configs_name_all=(papers_w8_metis friendster_w8_metis igbfull_w8_metis)
-# configs_name_all=(igbfull_w8_random)
-# configs_name_all=(igbfull_w4_metis papers_w4_random)
+# For exp of random partiton
+#configs_name_all=(papers_w8_random friendster_w8_random igbfull_w8_random)
+
 
 for fanout in ${fanout_array[@]}
 do
