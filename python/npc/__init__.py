@@ -3,6 +3,7 @@ from .sampler import *
 from .sageconv import *
 from .gatconv import *
 from .graphconv import *
+from . import utils
 import os
 import time
 

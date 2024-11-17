@@ -92,10 +92,10 @@ void Initialize(
       torch::tensor(vec_sp_alltoall_size_permute_step2);
   state->sp_alltoall_size_permute_step3 =
       torch::tensor(vec_sp_alltoall_size_permute_step3);
-  LOG(INFO) << "sp_alltoall_size_permute_step2: "
-            << TensorToString(state->sp_alltoall_size_permute_step2);
-  LOG(INFO) << "sp_alltoall_size_permute_step3: "
-            << TensorToString(state->sp_alltoall_size_permute_step3);
+  // LOG(INFO) << "sp_alltoall_size_permute_step2: "
+  //           << TensorToString(state->sp_alltoall_size_permute_step2);
+  // LOG(INFO) << "sp_alltoall_size_permute_step3: "
+  //           << TensorToString(state->sp_alltoall_size_permute_step3);
   state->cross_machine_flag = false;
 }
 

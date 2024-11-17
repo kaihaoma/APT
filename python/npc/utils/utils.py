@@ -296,7 +296,7 @@ def show_args(args: argparse.Namespace) -> None:
 def init_args(args=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="NPC args 0.1")
     parser.add_argument("--tag", type=str, default="empty_tag", help="tag")
-    parser.add_argument("--logs_dir", type=str, default="./logs/time.csv", help="log file dir")
+    parser.add_argument("--logs_dir", type=str, default="./outputs/time.csv", help="log file dir")
     parser.add_argument("--machine", type=str, default="4*T4 GPUs", help="machine config")
     parser.add_argument("--dataset", type=str, default="ogbn-products", help="dataset name")
     parser.add_argument("--model", type=str, default="SAGE", choices=["SAGE", "GCN", "GAT"], help="model name")
