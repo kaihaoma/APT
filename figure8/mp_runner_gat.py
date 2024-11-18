@@ -2,6 +2,8 @@ import torch.multiprocessing as mp
 import npc.utils as utils
 import atexit
 import importlib
+import sys
+import os
 
 
 def get_pre_defined_args(args):
@@ -38,6 +40,8 @@ def get_pre_defined_args(args):
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, os.path.join(os.getenv("APT_HOME"), "examples"))
+
     args, shared_tensor_list, global_nfeat = utils.pre_spawn()
 
     world_size = args.world_size
@@ -86,3 +90,5 @@ if __name__ == "__main__":
 
         if args.nproc_per_node != -1:
             del shared_tensors_with_nfeat
+
+    sys.path.pop(0)

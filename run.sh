@@ -1,7 +1,7 @@
-# echo "Run Figure 6"
-# cd figure6/
-# bash run.sh
-# cd ..
+echo "Run Figure 6"
+cd figure6/
+bash run.sh
+cd ..
 
 echo "Run Figure 8"
 cd figure8/
