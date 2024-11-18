@@ -40,8 +40,13 @@ python scripts/preprocess_graph.py --dataset xxx --path xxx
 The repository contains four directories as follows:
 
 ```shell
-gsampler-artifact-evaluation
-├── readme.MD
+APT
+├── readme.MD # instructions
+├── src # Implementation of unified execution engine
+├── python # Python wrappers
+├── third_party
+├── CMakeLists.txt
+├── LICENSE
 ├── fig_examples # Example output figures.
 ├── examples  # E2E training demo with APT
 ├── figure6   # reproduce figure6
