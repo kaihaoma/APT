@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 import dgl.nn.pytorch as dglnn
-import npc
-import time
-import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
+
+from ..ops import NPFeatureShuffle, MPFeatureShuffle
+from .graphconv import *
 
 
 class NPCGCN(nn.Module):
@@ -65,7 +65,7 @@ class NPCGCN(nn.Module):
             if l == 0:
                 # event.record()
                 h = h[fsi.inverse_idx]
-                h = npc.NPFeatureShuffle.apply(fsi, h)
+                h = NPFeatureShuffle.apply(fsi, h)
             if l != self.n_layers - 1:
                 h = self.activation(h)
                 h = self.dropout(h)
@@ -93,7 +93,9 @@ class DGLGCN(nn.Module):
         activation,
         dropout,
     ):
-        print(f"[Note]DGL GCN: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
+        print(
+            f"[Note]DGL GCN: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}"
+        )
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
         self.in_feats = in_feats
@@ -152,7 +154,7 @@ class SPGCN(nn.Module):
         self.n_classes = n_classes
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
-            self.layers.append(npc.SPGraphConv(in_feats, n_hidden, norm="none"))
+            self.layers.append(SPGraphConv(in_feats, n_hidden, norm="none"))
             for i in range(1, self.n_layers - 1):
                 self.layers.append(dglnn.GraphConv(n_hidden, n_hidden))
             self.layers.append(dglnn.GraphConv(n_hidden, n_classes))
@@ -289,7 +291,7 @@ class MPGCN(nn.Module):
 
         if self.n_layers > 1:
             # first mp layer
-            self.mp_layers = npc.MPGraphConv(
+            self.mp_layers = MPGraphConv(
                 self.in_feats_list[self.rank],
                 self.n_hidden,
                 norm="none",
@@ -323,7 +325,7 @@ class MPGCN(nn.Module):
         # fir mp layer
         h = self.mp_layers(blocks[0], h)
         # custom shuffle
-        h = npc.MPFeatureShuffle.apply(fsi, h)
+        h = MPFeatureShuffle.apply(fsi, h)
 
         h = self.ddp_modules((blocks[1:], h))
         return h

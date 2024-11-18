@@ -1,10 +1,9 @@
-import torch
 import torch.nn as nn
 import dgl.nn.pytorch as dglnn
-import npc
-import time
-import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
+
+from ..ops import NPFeatureShuffle, MPFeatureShuffle
+from .gatconv import *
 
 
 class NPCGAT(nn.Module):
@@ -91,9 +90,13 @@ class NPCGAT(nn.Module):
             else:  # other layer(s)
                 h = h.flatten(1)
             if l == 0:
-                fsi.feat_dim = self.n_hidden * self.heads[0] if l != self.n_layers - 1 else self.n_hidden
+                fsi.feat_dim = (
+                    self.n_hidden * self.heads[0]
+                    if l != self.n_layers - 1
+                    else self.n_hidden
+                )
                 h = h[fsi.inverse_idx]
-                h = npc.NPFeatureShuffle.apply(fsi, h)
+                h = NPFeatureShuffle.apply(fsi, h)
         return h  # event
 
 
@@ -111,7 +114,9 @@ class DGLGAT(nn.Module):
         )
 
     def init(self, fan_out, in_feats, n_hidden, n_classes, heads, activation, dropout):
-        print(f"[Note]DGL SAGE: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
+        print(
+            f"[Note]DGL SAGE: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}"
+        )
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
         self.in_feats = in_feats
@@ -193,7 +198,17 @@ class SPGAT(nn.Module):
             args.shuffle_with_dst,
         )
 
-    def init(self, fan_out, in_feats, n_hidden, n_classes, heads, activation, dropout, shuffle_with_dst):
+    def init(
+        self,
+        fan_out,
+        in_feats,
+        n_hidden,
+        n_classes,
+        heads,
+        activation,
+        dropout,
+        shuffle_with_dst,
+    ):
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
         self.in_feats = in_feats
@@ -202,7 +217,7 @@ class SPGAT(nn.Module):
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
             self.layers.append(
-                npc.SPGATConv(
+                SPGATConv(
                     in_feats,
                     n_hidden,
                     heads[0],
@@ -321,7 +336,7 @@ class MPDDP(nn.Module):
         if self.n_layers > 1:
             # first mp layer
             self.layers.append(
-                npc.MPGATConv(
+                MPGATConv(
                     self.in_feats_list[self.rank],
                     n_hidden,
                     heads[0],
@@ -365,8 +380,10 @@ class MPGAT(nn.Module):
         self.n_hidden = args.num_hidden
         self.heads = heads
         self.device = args.device
-        
-        self.fc = nn.Linear(args.mp_input_dim_list[args.rank], args.num_hidden * heads[0], bias=False)
+
+        self.fc = nn.Linear(
+            args.mp_input_dim_list[args.rank], args.num_hidden * heads[0], bias=False
+        )
 
         self.ddp_modules = DDP(
             MPDDP(args, heads, activation).to(self.device),
@@ -390,7 +407,7 @@ class MPGAT(nn.Module):
         h = x
         h = self.fc(h)
         fsi.feat_dim = self.heads[0] * self.n_hidden
-        h = npc.MPFeatureShuffle.apply(fsi, h)
+        h = MPFeatureShuffle.apply(fsi, h)
 
         h = self.ddp_modules(blocks, h)
         return h

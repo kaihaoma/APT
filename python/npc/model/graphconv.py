@@ -6,7 +6,7 @@ from typing import Tuple
 import dgl.function as fn
 import numpy as np
 
-from .ops import SPFeatureShuffle
+from ..ops import SPFeatureShuffle
 
 
 class SPGraphConv(nn.Module):

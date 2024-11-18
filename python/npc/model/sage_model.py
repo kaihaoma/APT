@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 import dgl.nn.pytorch as dglnn
-import npc
-import time
-import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
+
+from ..ops import NPFeatureShuffle, MPFeatureShuffle
+from .sageconv import *
 
 
 class NPCSAGE(nn.Module):
@@ -65,7 +65,7 @@ class NPCSAGE(nn.Module):
             if l == 0:
                 # event.record()
                 h = h[fsi.inverse_idx]
-                h = npc.NPFeatureShuffle.apply(fsi, h)
+                h = NPFeatureShuffle.apply(fsi, h)
             if l != self.n_layers - 1:
                 h = self.activation(h)
                 h = self.dropout(h)
@@ -93,7 +93,9 @@ class DGLSAGE(nn.Module):
         activation,
         dropout,
     ):
-        print(f"[Note]DGL SAGE: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}")
+        print(
+            f"[Note]DGL SAGE: fanout: {fan_out}\t in: {in_feats}, hid: {n_hidden}, out: {n_classes}"
+        )
         self.fan_out = fan_out
         self.n_layers = len(fan_out)
         self.in_feats = in_feats
@@ -155,7 +157,7 @@ class SPSAGE(nn.Module):
         self.layers = nn.ModuleList()
         if self.n_layers > 1:
             self.layers.append(
-                npc.SPSAGEConv(
+                SPSAGEConv(
                     in_feats,
                     n_hidden,
                     "mean",
@@ -298,7 +300,7 @@ class MPSAGE(nn.Module):
 
         if self.n_layers > 1:
             # first mp layer
-            self.mp_layers = npc.MPSAGEConv(
+            self.mp_layers = MPSAGEConv(
                 self.in_feats_list[self.rank],
                 self.n_hidden,
                 aggregator_type="mean",
@@ -332,7 +334,7 @@ class MPSAGE(nn.Module):
         # fir mp layer
         h = self.mp_layers(blocks[0], h)
         # custom shuffle
-        h = npc.MPFeatureShuffle.apply(fsi, h)
+        h = MPFeatureShuffle.apply(fsi, h)
 
         h = self.ddp_modules((blocks[1:], h))
         return h

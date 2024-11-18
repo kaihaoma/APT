@@ -2,9 +2,7 @@ import csv
 import dgl
 import npc
 import torch
-from gat_model import *
-from sage_model import *
-from gcn_model import *
+from model import *
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn.functional as F
@@ -103,140 +101,22 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         f"[Note]Rank#{rank} Done define sampler & dataloader, #batches:{num_batches_per_epoch}\n {utils.get_total_mem_usage_in_gb()}\n {utils.get_cuda_mem_usage_in_gb()}"
     )
 
-    # define model
+    # single-GPU model definition
     if args.model == "SAGE":
-        if args.system == "DP":
-            training_model = DGLSAGE(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "NP":
-            training_model = NPCSAGE(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "SP":
-            training_model = SPSAGE(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "MP":
-            training_model = MPSAGE(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-            fc_self = torch.empty(args.num_hidden, args.input_dim, device=device)
-            fc_neigh = torch.empty(args.num_hidden, args.input_dim, device=device)
-            gain = nn.init.calculate_gain("relu")
-            nn.init.xavier_uniform_(fc_self, gain=gain)
-            nn.init.xavier_uniform_(fc_neigh, gain=gain)
-            dist.broadcast(fc_self, 0)
-            dist.broadcast(fc_neigh, 0)
-            training_model.mp_layers.fc_self.weight.data = (
-                fc_self[:, args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1]]
-                .clone()
-                .detach()
-                .to(device)
-            )
-            training_model.mp_layers.fc_neigh.weight.data = (
-                fc_neigh[:, args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1]]
-                .clone()
-                .detach()
-                .to(device)
-            )
-        else:
-            raise ValueError(f"Invalid system:{args.system}")
+        model = SAGE(args=args, activation=torch.relu).to(device)
     elif args.model == "GAT":
         heads = [args.num_heads] * len(args.fan_out)
-        if args.system == "DP":
-            training_model = DGLGAT(
-                args=args,
-                heads=heads,
-                activation=F.elu,
-            ).to(device)
-        elif args.system == "NP":
-            training_model = NPCGAT(
-                args=args,
-                heads=heads,
-                activation=F.elu,
-            ).to(device)
-        elif args.system == "SP":
-            training_model = SPGAT(
-                args=args,
-                heads=heads,
-                activation=F.elu,
-            ).to(device)
-        elif args.system == "MP":
-            training_model = MPGAT(
-                args=args,
-                heads=heads,
-                activation=F.relu,
-            ).to(device)
-            fc = torch.empty(args.num_hidden * heads[0], args.input_dim, device=device)
-            gain = nn.init.calculate_gain("relu")
-            nn.init.xavier_uniform_(fc, gain=gain)
-            dist.broadcast(fc, 0)
-            training_model.fc.weight.data = (
-                fc[:, args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1]]
-                .clone()
-                .detach()
-                .to(device)
-            )
-        else:
-            raise ValueError(f"Invalid system:{args.system}")
+        model = GAT(args=args, heads=heads, activation=F.elu).to(device)
     elif args.model == "GCN":
-        if args.system == "DP":
-            training_model = DGLGCN(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "NP":
-            training_model = NPCGCN(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "SP":
-            training_model = SPGCN(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-        elif args.system == "MP":
-            training_model = MPGCN(
-                args=args,
-                activation=torch.relu,
-            ).to(device)
-            weight = torch.empty(args.input_dim, args.num_hidden, device=device)
-            nn.init.xavier_uniform_(weight)
-            dist.broadcast(weight, 0)
-            training_model.mp_layers.weight.data = (
-                weight[args.cumsum_feat_dim[rank] : args.cumsum_feat_dim[rank + 1]]
-                .clone()
-                .detach()
-                .to(device)
-            )
-        else:
-            raise ValueError(f"Invalid system:{args.system}")
+        model = GCN(args=args, activation=torch.relu).to(device)
+    # distributed model adaptation
+    adapted_model = npc.adapt(args, model, args.system, rank)
 
     print(
         f"[Note]Rank#{rank} Done define training model\t {utils.get_total_mem_usage_in_gb()}\t {utils.get_cuda_mem_usage_in_gb()}"
     )
 
-    if args.world_size > 1:
-        if args.system == "MP":
-            # check training model
-            for name, param in training_model.named_parameters():
-                print(f"[Note]name:{name}\t param:{param.shape}\t dev:{param.device}")
-
-        else:
-            print(f"[Note] {args.system} training model: {type(training_model)}")
-            training_model = DDP(
-                training_model,
-                device_ids=[device],
-                output_device=device,
-            )
-    optimizer = torch.optim.Adam(
-        training_model.parameters(), lr=1e-3, weight_decay=5e-4
-    )
+    optimizer = torch.optim.Adam(adapted_model.parameters(), lr=1e-3, weight_decay=5e-4)
     dist.barrier()
     print(
         f"[Note]Rank#{rank} Ready to train\t {utils.get_total_mem_usage_in_gb()}\t {utils.get_cuda_mem_usage_in_gb()}"
@@ -248,7 +128,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
     num_record_epochs = num_epochs - warmup_epochs
 
     for epoch in range(args.num_epochs):
-        training_model.train()
+        adapted_model.train()
         t2 = utils.get_time()
         total_sampling_time = 0
         total_loading_time = 0
@@ -261,7 +141,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
             t1 = utils.get_time()
 
-            batch_pred = training_model(loading_result)
+            batch_pred = adapted_model(loading_result)
             loss = F.cross_entropy(batch_pred, batch_labels)
             optimizer.zero_grad()
             loss.backward()

@@ -5,7 +5,7 @@ from torch.nn import functional as F
 from typing import Tuple
 import dgl.function as fn
 
-from .ops import SPFeatureShuffle
+from ..ops import SPFeatureShuffle
 
 
 class SPSAGEConv(nn.Module):

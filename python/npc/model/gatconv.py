@@ -7,7 +7,7 @@ import dgl.function as fn
 from dgl.ops import edge_softmax
 import numpy as np
 
-from .ops import SPFeatureShuffleGAT, MPFeatureShuffle, MPFeatureShuffleInfo
+from ..ops import SPFeatureShuffleGAT, MPFeatureShuffle, MPFeatureShuffleInfo
 
 
 class SPGATConv(nn.Module):
