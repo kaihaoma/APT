@@ -2,16 +2,15 @@ import csv
 import dgl
 import npc
 import torch
-from model import *
+from model import SAGE, GCN, GAT
 import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn.functional as F
 import torch.distributed as dist
 import npc.utils as utils
 import atexit
 
 
-def run(rank, local_rank, world_size, args, shared_tensor_list):
+def train_with_strategy(rank, local_rank, world_size, args, shared_tensor_list):
     print(f"[Note] Starting run on Rank#{rank}, local:{local_rank} of W{world_size}\t")
 
     device = torch.device(f"cuda:{local_rank}")
@@ -41,8 +40,10 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         init_mp=True,
     )
 
+    print("Pinning shared tensor.")
     for ts in shared_tensor_list:
         utils.pin_tensor(ts)
+    print("Shared tensore are pinned.")
 
     partition_data = npc.load_partition(
         args=args, rank=rank, device=device, shared_tensor_list=shared_tensor_list
@@ -109,6 +110,8 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
         model = GAT(args=args, heads=heads, activation=F.elu).to(device)
     elif args.model == "GCN":
         model = GCN(args=args, activation=torch.relu).to(device)
+    else:
+        raise ValueError(f"{args.model} Not supported")
     # distributed model adaptation
     adapted_model = npc.adapt(args, model, args.system, rank)
 
@@ -176,7 +179,7 @@ def run(rank, local_rank, world_size, args, shared_tensor_list):
 
         with open(args.logs_dir, "a") as f:
             writer = csv.writer(f, lineterminator="\n")
-            cache_memory = f"{round(args.cache_memory / (1024*1024*1024), 1)}GB"
+            cache_memory = f"{round(args.cache_memory / (1024*1024*1024))}GB"
             cache_value = (
                 args.greedy_feat_ratio
                 if args.cache_mode == "greedy"
@@ -228,7 +231,7 @@ if __name__ == "__main__":
     local_ranks = [i for i in range(nproc)]
     for i in range(nproc):
         p = mp.Process(
-            target=run,
+            target=train_with_strategy,
             args=(ranks[i], local_ranks[i], world_size, args, shared_tensor_list),
         )
         atexit.register(utils.kill_proc, p)
