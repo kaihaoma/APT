@@ -1,4 +1,7 @@
+import torch
+import torch.nn as nn
 import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from .model import *
 
@@ -78,6 +81,8 @@ def adapt(args, model: nn.Module, strategy: str, rank: int):
             )
         else:
             raise ValueError(f"Invalid parallism strategy: {strategy}")
+    else:
+        raise ValueError(f"Invalid model type: {model.__class__.__name__}")
     adapted_model = adapted_model.to(device)
     if args.world_size > 1 and strategy != "MP":
         adapted_model = DDP(
