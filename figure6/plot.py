@@ -475,6 +475,83 @@ def draw_stacked_bar(
     plt_save_and_final(save_path)
 
 
+def make_scatter_strategy(
+    file_path: str,
+    key_name="hidden_dim",
+    include_dict={},
+    xlabels=[8, 32, 128, 512],
+):
+    labels = ["GDP", "NFP", "SNP", "DNP"]
+    lines = []
+    if isinstance(file_path, str):
+        file_path = [file_path]
+    for fp in file_path:
+        header, line = read_csv(fp, has_header=None)
+        lines.extend(line)
+    num_series = len(xlabels)
+    num_elements_per_series = len(labels)
+    vals_dict = {}
+    for line in lines:
+        # decode tag
+        tag_list = line[0].split("_")
+        graph = tag_list[0]
+        world_size = int(tag_list[1][1:])
+        method = tag_list[2]
+        offset = 1 if "variance" in line[0] else 0
+        sys = line[16]
+        model = tag_list[3 + offset]
+        gpu_cache_mem = int(tag_list[5 + offset][2:-2])
+        if "of16" in tag_list[4 + offset]:
+            nl = float(tag_list[4 + offset][2:-4])
+
+        input_dim = int(line[4])
+        hidden_dim = int(line[5])
+        total_time = float(line[-1])
+        fanout = line[7]
+
+        key_dict = {
+            "graph": graph,
+            "world_size": world_size,
+            "method": method,
+            "sys": sys,
+            "model": model,
+            "gpu_cache_mem": gpu_cache_mem,
+            "input_dim": input_dim,
+            "hidden_dim": hidden_dim,
+            "fanout": fanout,
+        }
+
+        xid = get_xid(
+            xlabels=xlabels,
+            key_dict=key_dict,
+            include_dict=include_dict,
+            key_name=key_name,
+        )
+        if xid is None:
+            continue
+        if key_name != "hidden_dim":
+            select_key = f"{graph}_w{world_size}_{model}_hidden_dim{hidden_dim}"
+        else:
+            select_key = f"{graph}_w{world_size}_{model}"
+        if select_key not in vals_dict:
+            vals_dict[select_key] = [
+                [0] * num_elements_per_series for i in range(num_series)
+            ]
+
+        vals_dict[select_key][xid][sys_to_id(sys)] = total_time / 1000
+    for key, val in vals_dict.items():
+        for it, series in enumerate(val):
+            vals_dict[key][it] = np.argmin(series)
+    orders = ["papers", "friendster", "igbfull"]
+    results = []
+    for name in orders:
+        for key, val in vals_dict.items():
+            if name in key:
+                results.append(val)
+                break
+    return results
+
+
 def plt_save_and_final(save_path):
     print(f"[Note]Save to {save_path}")
     plt.savefig(save_path, bbox_inches="tight")
@@ -484,7 +561,18 @@ def plt_save_and_final(save_path):
 if __name__ == "__main__":
     # [NOTE] Main Exp
     # draw hidden_dim
-    scatter_hidden_dim = [[3, 3, 0, 0], [2, 2, 3, 0], [3, 3, 3, 0]]
+    # scatter_hidden_dim = [[3, 3, 0, 0], [2, 2, 3, 0], [3, 3, 3, 0]]
+    scatter_hidden_dim = make_scatter_strategy(
+        file_path="outputs/costmodel_hidden_dim.csv",
+        include_dict={
+            "world_size": 8,
+            "gpu_cache_mem": 4,
+            "model": "SAGE",
+            "fanout": "[10, 10, 10]",
+        },
+        key_name="hidden_dim",
+        xlabels=[8, 32, 128, 512],
+    )
     preprocess_data(
         file_path="outputs/results_hidden_dim.csv",
         include_dict={
@@ -509,7 +597,18 @@ if __name__ == "__main__":
     )
 
     # draw fanout
-    scatter_fanout = [[0, 0, 0, 0], [0, 2, 2, 2], [0, 3, 2, 2]]
+    # scatter_fanout = [[0, 0, 0, 0], [0, 2, 2, 2], [0, 3, 2, 2]]
+    scatter_fanout = make_scatter_strategy(
+        file_path="outputs/costmodel_fanout.csv",
+        include_dict={
+            "world_size": 8,
+            "gpu_cache_mem": 4,
+            "model": "SAGE",
+            "hidden_dim": 32,
+        },
+        key_name="fanout",
+        xlabels=["[5, 10]", "[10, 15]", "[10, 10, 10]", "[10, 15, 20]"],
+    )
     preprocess_data(
         file_path="outputs/results_fanout.csv",
         include_dict={
@@ -531,9 +630,21 @@ if __name__ == "__main__":
         legend=False,
         save_path="outputs/fanout.pdf",
     )
+    exit()
 
     # draw vary gpu cache memory
-    scatter_gpu_cache_mem = [[0, 3, 3, 0], [0, 2, 2, 2], [0, 2, 2, 3]]
+    # scatter_gpu_cache_mem = [[0, 3, 3, 0], [0, 2, 2, 2], [0, 2, 2, 3]]
+    scatter_gpu_cache_mem = make_scatter_strategy(
+        file_path="outputs/costmodel_cache_mem.csv",
+        include_dict={
+            "hidden_dim": 32,
+            "world_size": 8,
+            "model": "SAGE",
+            "fanout": "[10, 10, 10]",
+        },
+        key_name="gpu_cache_mem",
+        xlabels=[0, 2, 4, 6],
+    )
     preprocess_data(
         file_path="outputs/results_cache_mem.csv",
         include_dict={

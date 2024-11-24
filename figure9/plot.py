@@ -502,5 +502,5 @@ if __name__ == "__main__":
         ylimit=17,
         scatter=None,
         legend=False,
-        save_path="random_partition.pdf",
+        save_path="outputs/random_partition.pdf",
     )

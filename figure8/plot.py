@@ -10,7 +10,7 @@ FONT_SIZE = 13
 COLOR_LIST = ["white", "silver", "bisque", "skyblue"]
 HATCH_LIST = ["||", None, "//"]
 
-gat_path = "outputs/gat_hidden_dim"
+gat_path = "outputs/hidden_dim"
 
 
 def read_csv(input_path=None, has_header=True):
