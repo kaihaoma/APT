@@ -39,8 +39,8 @@ The repository is organized as follows:
 ```shell
 APT
 ├── readme.MD # instructions
-├── src # implementation of unified execution engine
-├── python # python library
+├── src/ # implementation of unified execution engine
+├── python/ # python library
 │   ├── npc/
 │   │   ├── cost_model/ # cost model estimator module
 │   │   ├── model/      # APT-adapted model
@@ -49,15 +49,16 @@ APT
 │   │   ├── ops.py      # python wrapper for C++ operators
 │   │   ├── sampler.py  # APT-adapted sampler
 │   └── setup.py
-├── third_party
+├── third_party/
 ├── CMakeLists.txt
 ├── LICENSE
-├── fig_examples # example output figures
-├── examples  # e2e training demo with APT
-├── figure6   # reproduce figure6
-├── figure7   # reproduce figure7
-├── figure8   # reproduce figure8
-├── figure9   # reproduce figure9
+├── fig_examples/ # example output figures
+├── examples/     # e2e training demo with APT
+├── npc_dataset/  # pre-configured datasets
+├── figure6/      # reproduce figure6
+├── figure7/      # reproduce figure7
+├── figure8/      # reproduce figure8
+├── figure9/      # reproduce figure9
 ├── clean.sh  # clean all results
 └── run.sh    # run all experiments
 ```
