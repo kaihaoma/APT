@@ -56,7 +56,6 @@ APT
 ├── examples/     # e2e training demo with APT
 ├── npc_dataset/  # pre-configured datasets
 ├── figure6/      # reproduce figure6
-├── figure7/      # reproduce figure7
 ├── figure8/      # reproduce figure8
 ├── figure9/      # reproduce figure9
 ├── clean.sh  # clean all results
