@@ -193,8 +193,6 @@ def partition_graph(output_path="/efs/khma/Projects/NPC/npc_dataset", ds_name="p
 
 if __name__ == "__main__":
     # partitioned graph
-    # load_rawdata()
-    partition_graph(ds_name="products", world_size_list=[32], part_method="metis", dry_run=False)
-    # partition_graph(ds_name="papers", world_size_list=[32], part_method="metis")
-    # partition_graph(ds_name="friendster", world_size_list=[32], part_method="metis")
-    # partition_graph(ds_name="igbfull", world_size_list=[32], part_method="metis")
+    partition_graph(ds_name="papers", world_size_list=[8], part_method="metis")
+    partition_graph(ds_name="friendster", world_size_list=[8], part_method="metis")
+    partition_graph(ds_name="igbfull", world_size_list=[8], part_method="metis")
