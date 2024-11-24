@@ -630,7 +630,6 @@ if __name__ == "__main__":
         legend=False,
         save_path="outputs/fanout.pdf",
     )
-    exit()
 
     # draw vary gpu cache memory
     # scatter_gpu_cache_mem = [[0, 3, 3, 0], [0, 2, 2, 2], [0, 2, 2, 3]]
