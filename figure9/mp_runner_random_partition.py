@@ -58,7 +58,7 @@ if __name__ == "__main__":
     # for inputs in get_pre_defined_args(args):
     #     for key, value in inputs.items():
     #         setattr(args, key, value)
-    #     args.tag = f"{args.model}_nl{args.num_localnode_feats_in_workers}of8_cm{round(args.cache_memory / (1024*1024*1024), 1)}GB"
+    #     args.tag = f"{args.model}_nl{args.num_localnode_feats_in_workers}of8_cm{round(args.cache_memory / (1024*1024*1024))}GB"
     #     utils.show_args(args)
 
     #     npc.determine_best_strategy(
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
         for system in ["DP", "NP", "SP", "MP"]:
             args.system = system
-            args.tag = f"{system}_{args.model}_nl{args.num_localnode_feats_in_workers}of8_cm{round(args.cache_memory / (1024*1024*1024), 1)}GB"
+            args.tag = f"{system}_{args.model}_nl{args.num_localnode_feats_in_workers}of8_cm{round(args.cache_memory / (1024*1024*1024))}GB"
             key = "npc" if system == "NP" else "ori"
             args.dryrun_file_path = (
                 f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"

@@ -10,7 +10,7 @@ To the run the benchmarks and get the figures all in one, run the following in s
 bash run.sh
 ```
 
-This will automatically run the expriments for `hidden dimension`, `fanout` and `GPU cache memory` as is described in the paper. After the benchmark completes, The generated figures (`hidden_dim.pdf`, `fanout.pdf` and `cache_mem.pdf`) will appear in the `outputs/` directory. Example figures can be found at `{APT_HOME}/fig_examples/figure6`.
+This will automatically run the expriments for `hidden dimension`, `fanout` and `GPU cache memory` as is described in the paper. After the benchmark completes, The generated figures (`hidden_dim.pdf`, `fanout.pdf` and `gpu_cache_mem.pdf`) will appear in the `outputs/` directory. Example figures can be found at `{APT_HOME}/fig_examples/figure6`.
 
 # Run Specific Experiments
 
