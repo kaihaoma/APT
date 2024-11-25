@@ -1,5 +1,4 @@
 import torch.multiprocessing as mp
-import npc
 import npc.utils as utils
 import atexit
 import importlib
@@ -17,23 +16,14 @@ def get_pre_defined_args(args):
     # generate args
     for cache_mem in cache_memory_in_gbs:
         for num_hidden in hidden_dims:
-            # for system in ["DP", "NP", "SP", "MP"]:
-            # cross-machine feat loading case
-            # tag = f"{system}_{model}_nl{nl}of8_cm{cache_mem}GB"
             # model specific
             num_heads, num_hidden = (4, num_hidden)
-            # key = "npc" if system == "NP" else "ori"
-            # # dryrun path
-            # dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"
             yield {
-                # "system": system,
                 "model": model,
                 "cache_memory": cache_mem * 1024 * 1024 * 1024,
                 "num_localnode_feats_in_workers": nl,
-                # "tag": tag,
                 "num_heads": num_heads,
                 "num_hidden": num_hidden,
-                # "dryrun_file_path": dryrun_file_path,
             }
 
 
@@ -53,17 +43,6 @@ if __name__ == "__main__":
     print(
         f"[Note]procs:{nproc}\t world_size:{world_size}\t ranks:{ranks}\t local_ranks:{local_ranks}"
     )
-
-    # # determine the best parallelism strategy for each config
-    # for inputs in get_pre_defined_args(args):
-    #     for key, value in inputs.items():
-    #         setattr(args, key, value)
-    #     args.tag = f"{args.model}_nl{args.num_localnode_feats_in_workers}of8_cm{round(args.cache_memory / (1024*1024*1024))}GB"
-    #     utils.show_args(args)
-
-    #     npc.determine_best_strategy(
-    #         nproc, ranks, local_ranks, world_size, args, shared_tensor_list, 1, 5
-    #     )
 
     # load CPU resident features
     shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(

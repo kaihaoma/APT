@@ -17,23 +17,14 @@ def get_pre_defined_args(args):
     # generate args
     for cache_mem in cache_memory_in_gbs:
         for num_hidden in hidden_dims:
-            # for system in ["DP", "NP", "SP", "MP"]:
-            # cross-machine feat loading case
-            # tag = f"{system}_{model}_nl{nl}of8_cm{cache_mem}GB"
             # model specific
             num_heads, num_hidden = (-1, num_hidden)
-            # key = "npc" if system == "NP" else "ori"
-            # # dryrun path
-            # dryrun_file_path = f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"
             yield {
-                # "system": system,
                 "model": model,
                 "cache_memory": cache_mem * 1024 * 1024 * 1024,
                 "num_localnode_feats_in_workers": nl,
-                # "tag": tag,
                 "num_heads": num_heads,
                 "num_hidden": num_hidden,
-                # "dryrun_file_path": dryrun_file_path,
             }
 
 
