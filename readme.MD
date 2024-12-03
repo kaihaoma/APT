@@ -16,7 +16,7 @@ This branch contains artifacts for evaluating APT. To reproduce results in the p
 
 4. If you are using our provided instance, all datasets and environments are preprocessed and ready, and you can directly proceed to the `Execution` step. If not, please follow the instructions below for a proper setup.
 
-For login instructions to our provided instance, please refer to comments `A2` and `A3` in ppopp25ae website.
+For login instructions to our provided instance, please refer to comments `A3` in ppopp25ae website.
 
 # Directory Structure
 
@@ -64,7 +64,7 @@ After obtaining the raw dataset, save it in dgl format and use the provided `scr
 
 # Setup APT
 
-__If you are using our provided instance, run `conda activet ap2` to use the pre-configured conda environment and skip this step.__
+__If you are using our provided instance, run `conda activate ap2` to use the pre-configured conda environment and skip this step.__
 
 ## Software Prerequisites
 
