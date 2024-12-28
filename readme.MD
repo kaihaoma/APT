@@ -1,20 +1,22 @@
 # Introduction
 
-This branch contains artifacts for evaluating APT. To reproduce results in the paper, please pull the latest version from this branch. It includes codes to reproduce Figures 6, 8 and 9 in the paper:
+This branch contains artifacts for evaluating APT. To reproduce results in the paper, please pull the latest version from this branch. It includes codes to reproduce Figures 1, 6, 7, 8 and 9 in the paper:
 
+- **Figure 1**: Epoch time for training GraphSAGE with 8 GPUs varying input dim and hidden dim.
 - **Figure 6**: Epoch time for training GraphSAGE with 8 GPUs varying hidden dim, fanout and GPU cache size.
+- **Figure 7**: Epoch time for training GraphSAGE with 16 GPUs on 4 machines varying hidden dim.
 - **Figure 8**: Epoch time for training GAT with 8 GPUs varying hidden dim.
 - **Figure 9**: Epoch time for training GraphSAGE with 8 GPUs using random graph partitions.
 
 **Notes:**
 
-1. We dont't provide the instructions here to reproduce figure 7 since it needs 16 GPUs on 4 machines and we currently don't have adequate machines on hand. However, we will provide instructions to run APT in multi-machine environments in the open-sourced codes.
+1. To replicate the same experimental results as in the paper, we recommend using our provided AWS `g4dn.metal` instance with 8 NVIDIA T4 GPUs, 96 vCPUs, and 378GB memory. Running all scripts takes approximately 30 hours.
 
-2. To replicate the same experimental results as in the paper, we recommend using our provided AWS `g4dn.metal` instance with 8 NVIDIA T4 GPUs, 96 vCPUs, and 378GB memory. Running all scripts takes approximately 30 hours.
+2. If you choose to use your own hardware to run the benchmarks, please ensure your hardware has adequate memory to host the large graphs, for example at least 378GB memory.
 
-3. If you choose to use your own hardware to run the benchmarks, please ensure your hardware has adequate memory to host the large graphs, for example at least 378GB memory.
+3. If you are using our provided instance, all datasets and environments are preprocessed and ready, and you can directly proceed to the `Execution` step. If not, please follow the instructions below for a proper setup.
 
-4. If you are using our provided instance, all datasets and environments are preprocessed and ready, and you can directly proceed to the `Execution` step. If not, please follow the instructions below for a proper setup.
+4. We dont't include reproducing Figure 7 in the all-in-one launch script (`run.sh`) as it needs 16 GPUs on 4 machines and we currently don't have adequate capacity at hand. However, we still provide the code scripts necessary to reproduce it for reference in this artifact.
 
 For login instructions to our provided instance, please refer to comments `A3` in ppopp25ae website.
 
@@ -41,7 +43,9 @@ APT
 ├── fig_examples/ # example output figures
 ├── examples/     # e2e training demo with APT
 ├── npc_dataset/  # pre-configured datasets
+├── figure1/      # reproduce figure1
 ├── figure6/      # reproduce figure6
+├── figure7/      # reproduce figure7
 ├── figure8/      # reproduce figure8
 ├── figure9/      # reproduce figure9
 ├── clean.sh  # clean all results
@@ -101,7 +105,7 @@ cd python; python setup.py install
 
 # Execution
 
-To run all the benchmarks and generature Figure 6, 8 and 9 together, run the following command (from the root directory of this repo):
+To run all the benchmarks and generature Figure 1, 6, 8 and 9 together, run the following command (from the root directory of this repo):
 ```shell
 bash clean.sh
 bash run.sh
