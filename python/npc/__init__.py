@@ -1,20 +1,22 @@
+import os
+import torch
+import torch.distributed as dist
+
+
+package_path = os.path.dirname(os.path.abspath(os.path.expanduser(__file__)))
+so_path = os.path.join(package_path, "libnpc.so")
+try:
+    torch.classes.load_library(so_path)
+    print(f"[Note]load so from {so_path}")
+except Exception:
+    raise ImportError("Cannot load NPC C++ library")
+
+
 from .ops import *
 from .sampler import *
-from .sageconv import *
-from .gatconv import *
-from .graphconv import *
-import os
-import time
-
-
-def _load_npc_library():
-    package_path = os.path.dirname(os.path.abspath(os.path.expanduser(__file__)))
-    so_path = os.path.join(package_path, "libnpc.so")
-    try:
-        torch.classes.load_library(so_path)
-        print(f"[Note]load so from {so_path}")
-    except Exception:
-        raise ImportError("Cannot load NPC C++ library")
+from .adaptor import *
+from .cost_model import *
+from . import utils
 
 
 def _init(rank, local_rank, world_size, shared_queue):
@@ -47,8 +49,10 @@ def _init_broadcast(rank, local_rank, world_size, node_size, device, num_nccl_co
     )
 
 
-def init(rank, local_rank, world_size, node_size, num_nccl_comms=2, device=None, init_mp=True):
-    _load_npc_library()
+def init(
+    rank, local_rank, world_size, node_size, num_nccl_comms=2, device=None, init_mp=True
+):
+    # _load_npc_library()
     if init_mp:
         # _init(rank, world_size, shared_queue)
         _init_broadcast(rank, local_rank, world_size, node_size, device, num_nccl_comms)

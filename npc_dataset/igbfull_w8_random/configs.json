@@ -1,0 +1,21 @@
+{
+    "name": "igbfull",
+    "num_workers": 8,
+    "world_size": 8,
+    "input_dim": 128,
+    "num_classes": 19,
+    "min_vids": [
+        0,
+        33677201,
+        67350019,
+        101017585,
+        134680568,
+        168350383,
+        202020656,
+        235680525,
+        269346174
+    ],
+    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/igbfull_w8_random/igbfull_w8_random.bin",
+    "number_nodes": 269346174,
+    "number_edges": 3996442004
+}
