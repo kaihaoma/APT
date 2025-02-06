@@ -8,6 +8,7 @@ This is the repository containing the source code and artifact for the PPoPP'25 
 
 To install and use APT, the following dependencies is required. We suggest you create a new conda environment for this.
 
+* python >= 3.9
 * cmake >= 3.27.4
 * CUDA >= 11.8
 * DGL >= 1.1.2
@@ -39,7 +40,7 @@ cd python; python setup.py install
 
 # Usage
 
-We provide shell scripts for running both single-machine and multi-machine GNN training. See instructions in `example/` for detail.
+We provide shell scripts for running both single-machine and multi-machine GNN training. See instructions in `examples/` for detail.
 
 # License
 
