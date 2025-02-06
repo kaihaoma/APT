@@ -179,7 +179,7 @@ def train_with_strategy(rank, local_rank, world_size, args, shared_tensor_list):
 
         with open(args.logs_dir, "a") as f:
             writer = csv.writer(f, lineterminator="\n")
-            cache_memory = f"{round(args.cache_memory / (1024*1024*1024))}GB"
+            cache_memory = f"{round(args.cache_memory / (1024 * 1024 * 1024))}GB"
             cache_value = (
                 args.greedy_feat_ratio
                 if args.cache_mode == "greedy"
@@ -223,16 +223,60 @@ def train_with_strategy(rank, local_rank, world_size, args, shared_tensor_list):
 
 
 if __name__ == "__main__":
-    args, shared_tensor_list = utils.pre_spawn()
+    args, shared_tensor_list, global_nfeat = utils.pre_spawn()
+
+    if args.nproc_per_node == -1:
+        print("Train with single machine")
+    elif args.nproc_per_node > 0:
+        print(
+            f"Train with multiple machine with each machine holding {args.nproc_per_node} workers"
+        )
+    else:
+        raise ValueError(args.nproc_per_node)
     world_size = args.world_size
-    nproc = world_size
+    nproc = world_size if args.nproc_per_node == -1 else args.nproc_per_node
+    ranks = args.ranks
+    local_ranks = args.local_ranks
+    fanout_info = str(args.fan_out).replace(" ", "")
+    config_key = args.configs_path.split("/")[-2]
+    print(
+        f"[Note]procs:{nproc}\t world_size:{world_size}\t ranks:{ranks}\t local_ranks:{local_ranks}"
+    )
+
+    # determine the best parallelism strategy for each config
+    args.tag = f"{args.model}_nl{args.num_localnode_feats_in_workers}of8_cm{round(args.cache_memory / (1024 * 1024 * 1024))}GB"
+    utils.show_args(args)
+
+    best_strategy = npc.determine_best_strategy(
+        nproc, ranks, local_ranks, world_size, args, shared_tensor_list, 1, 5
+    )
+
+    # start training with the best parallelism strategy
+    args.system = best_strategy
+    args.tag = f"{best_strategy}_{args.model}_nl{args.num_localnode_feats_in_workers}of8_cm{round(args.cache_memory / (1024 * 1024 * 1024))}GB"
+    key = "npc" if best_strategy == "NP" else "ori"
+    args.dryrun_file_path = (
+        f"{args.caching_candidate_path_prefix}/{key}_{config_key}_{fanout_info}"
+    )
+    utils.show_args(args)
+
+    # load CPU resident features
+    shared_tensors_with_nfeat = utils.determine_feature_reside_cpu(
+        args, global_nfeat, shared_tensor_list
+    )
+
+    # start training process
     processes = []
-    ranks = [i for i in range(nproc)]
-    local_ranks = [i for i in range(nproc)]
     for i in range(nproc):
         p = mp.Process(
             target=train_with_strategy,
-            args=(ranks[i], local_ranks[i], world_size, args, shared_tensor_list),
+            args=(
+                ranks[i],
+                local_ranks[i],
+                world_size,
+                args,
+                shared_tensors_with_nfeat,
+            ),
         )
         atexit.register(utils.kill_proc, p)
         p.start()

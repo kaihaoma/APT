@@ -288,6 +288,7 @@ def run_costmodel(
     shared_tensor_list: List[torch.Tensor],
     warmup_epochs: int,
     dryrun_epochs: int,
+    result_queue: mp.Queue,
 ):
     # init
     device = torch.device(f"cuda:{local_rank}")
@@ -624,6 +625,7 @@ def run_costmodel(
     to_send_tensor /= dryrun_epochs
 
     dist.reduce(to_send_tensor, dst=0, op=dist.ReduceOp.MAX)
+    best_strategy = None
     if rank == 0:
         ret = to_send_tensor.tolist()
         ret = [val * 1000.0 for val in ret]
@@ -653,7 +655,7 @@ def run_costmodel(
 
             writer = csv.writer(f, lineterminator="\n")
             write_tag = f"{args.configs_path.split('/')[-2]}_{args.tag}"
-            cache_memory = f"{round(args.cache_memory / (1024*1024*1024))}GB"
+            cache_memory = f"{round(args.cache_memory / (1024 * 1024 * 1024))}GB"
             cache_value = (
                 args.greedy_feat_ratio
                 if args.cache_mode == "greedy"
@@ -687,7 +689,9 @@ def run_costmodel(
                 writer.writerow(record_log)
 
         system_name = ["GDP", "DNP", "SNP", "NFP"]
+        internal_name = ["DP", "NP", "SP", "MP"]
         system_val = [np.sum(record) for record in all_records]
+        result_queue.put(internal_name[np.argmin(system_val)])
         print("Best strategy:", system_name[np.argmin(system_val)])
     dist.barrier()
     cleanup()
@@ -703,6 +707,9 @@ def determine_best_strategy(
     warmup_epochs: int,
     dryrun_epochs: int,
 ):
+    # Create a Queue for results
+    result_queue = mp.Queue()
+
     processes = []
     for i in range(nproc):
         p = mp.Process(
@@ -715,6 +722,7 @@ def determine_best_strategy(
                 shared_tensor_list,
                 warmup_epochs,
                 dryrun_epochs,
+                result_queue,
             ),
         )
         atexit.register(kill_proc, p)
@@ -723,3 +731,7 @@ def determine_best_strategy(
 
     for p in processes:
         p.join()
+    
+    assert not result_queue.empty()
+    best_strategy = result_queue.get()
+    return best_strategy
