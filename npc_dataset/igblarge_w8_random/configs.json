@@ -1,8 +1,0 @@
-{
-    "name": "igblarge_w8_random",
-    "num_workers": 8,
-    "world_size": 8,
-    "num_classes": 19,
-    "min_vids": "0,12497968,25001955,37492009,49996299,62493408,74996658,87500445,100000000",
-    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/igblarge_w8_random/igblarge_random.bin"
-}

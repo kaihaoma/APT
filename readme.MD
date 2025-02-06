@@ -4,6 +4,8 @@ This is the repository containing the source code and artifact for the PPoPP'25 
 
 # Installation
 
+Follow these steps to prepare and install APT with all required dependcies.
+
 ## Software Prerequisites
 
 To install and use APT, the following dependencies is required. We suggest you create a new conda environment for this.
@@ -16,9 +18,7 @@ To install and use APT, the following dependencies is required. We suggest you c
 
 ## Clone APT
 
-Follow these instructions to prepare and install APT with all required dependcies:
-
-1. Git clone the repo:
+Git clone the repo:
 ```shell
 git clone --recurse-submodules https://github.com/kaihaoma/APT.git
 ```
@@ -41,6 +41,19 @@ cd python; python setup.py install
 # Usage
 
 We provide shell scripts for running both single-machine and multi-machine GNN training. See instructions in `examples/` for detail.
+
+# Datasets
+
+We need to partition the graph and output the required format before APT can operate on it. We provide the code script to prepared the dataset in `scripts/preprocess_dataset.py`. Especially, you will need to preprare your own dataset in advance in the binary format that can be loaded with `dgl.load_graphs()`. The script goes through the following steps.
+
+1. Load your inital graph with `dgl.load_graphs()`.
+2. Partition the graph using `dgl.distributed.partition_graph()`, either with Metis or random partitioning.
+3. Calculate the ID offsets of each graph partition.
+4. Reorder the whole graph to make the IDs in each graph partition contiguous.
+5. Store the reordered graph and configs of the partitions in the output path.
+6. Count dryrun results (e.g., node hotness) if indicated.
+
+Example config files are in `npc_dataset/`.
 
 # License
 

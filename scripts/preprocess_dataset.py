@@ -52,7 +52,7 @@ def clear_graph_data_except_train_mask(graph):
         graph.edata.pop(k)
 
 
-def load_rawdata(path_prefix="/efs/khma/Projects/NPC/original_dataset"):
+def load_rawdata(path_prefix="../original_dataset"):
     # papers
     import load_data
 
@@ -61,21 +61,11 @@ def load_rawdata(path_prefix="/efs/khma/Projects/NPC/original_dataset"):
 
     save_graph_path = os.path.join(path_prefix, "products.bin")
     print(f"[Note]Save graph to {save_graph_path}")
-    dgl.save_graphs(save_graph_path, [graph])
-
-    # friendster
-
-    # igb-full
-    # graph, _ = load_data.load_igb()
-    # print(f"[Note]Graph:{graph}")
-
-    # save_graph_path = os.path.join(path_prefix, "igbfull.bin")
-    # print(f"[Note]Save graph to {save_graph_path}")
-    # dgl.save_graphs(save_graph_path, [graph])
+    torch.save(save_graph_path, [graph])
 
 
 # load_original_graph ()
-def load_original_graph(path_prefix="/efs/khma/Projects/NPC/original_dataset", ds_name="papers"):
+def load_original_graph(path_prefix="../original_dataset", ds_name="papers"):
     # load preprocessed graph
     load_graph_path = os.path.join(path_prefix, f"{ds_name}.bin")
     print(f"[Note]Load graph from {load_graph_path}")
@@ -83,7 +73,7 @@ def load_original_graph(path_prefix="/efs/khma/Projects/NPC/original_dataset", d
     return graph
 
 
-def partition_graph(output_path="/efs/khma/Projects/NPC/npc_dataset", ds_name="papers", world_size_list=[8], part_method="metis", dry_run=True):
+def partition_graph(output_path="../npc_dataset", ds_name="papers", world_size_list=[8], part_method="metis", dry_run=True):
     graph = load_original_graph(ds_name=ds_name)
     n_nodes = graph.number_of_nodes()
     n_edges = graph.number_of_edges()
@@ -164,7 +154,7 @@ def partition_graph(output_path="/efs/khma/Projects/NPC/npc_dataset", ds_name="p
         if dry_run:
             from dryrun import sample_profile, npc_sample_profile
 
-            dryrun_savedir = "/efs/khma/Projects/NPC/sampling_all/ap_simulation"
+            dryrun_savedir = "../sampling_all/ap_simulation"
             full_graph_name = f"{ds_name}_w{world_size}_{part_method}"
 
             sample_profile(
@@ -194,5 +184,5 @@ def partition_graph(output_path="/efs/khma/Projects/NPC/npc_dataset", ds_name="p
 if __name__ == "__main__":
     # partitioned graph
     partition_graph(ds_name="papers", world_size_list=[8], part_method="metis")
-    partition_graph(ds_name="friendster", world_size_list=[8], part_method="metis")
-    partition_graph(ds_name="igbfull", world_size_list=[8], part_method="metis")
+    # partition_graph(ds_name="friendster", world_size_list=[8], part_method="metis")
+    # partition_graph(ds_name="igbfull", world_size_list=[8], part_method="metis")

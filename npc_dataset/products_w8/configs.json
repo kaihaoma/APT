@@ -1,9 +1,0 @@
-{
-    "name": "products", 
-    "num_workers": 8, 
-    "world_size": 8, 
-    "input_dim": 100, 
-    "num_classes": 47, 
-    "min_vids": "0, 315327, 624727, 935573, 1196801, 1512123, 1827008, 2134828, 2449029", 
-    "graph_path": "/efs/khma/Projects/NPC/npc_dataset/products_w8/products_pure.bin"
-}
