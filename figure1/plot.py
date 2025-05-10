@@ -280,7 +280,7 @@ def draw_bar(
         ax.set_yticks(yticks)
         ylim = yticks[-1] if ylimit is None else ylimit
         ax.set_ylim(0, ylim)
-        ax.tick_params(axis="y", labelsize=10)  # 设置 y 轴刻度标签的字体大小
+        ax.tick_params(axis="y", labelsize=10)
 
         ax.set_xticks([])
         # ax.set_xticklabels()
